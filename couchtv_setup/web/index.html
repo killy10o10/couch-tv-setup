@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Couch TV Setup</title>
+<meta name="setup-key" content="__SETUP_KEY__">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="sky"></div>
+<main>
+  <header>
+    <div class="logo">Couch TV <span>Setup</span></div>
+    <ol id="dots" aria-label="Steps"></ol>
+  </header>
+
+  <!-- 0 -->
+  <section data-step="welcome">
+    <h1>Put Couch TV on your Fire TV Stick</h1>
+    <p class="lead">A clean home screen with no adverts, your apps up front, the time and the weather. About ten minutes, and you can undo all of it.</p>
+    <ul class="need">
+      <li><b>Your Fire TV Stick</b>, switched on, with its remote.</li>
+      <li><b>This Mac on the same Wi-Fi</b> as the TV.</li>
+    </ul>
+    <p class="small">This Mac is only needed today. Once it is set up, Couch TV runs on the TV by itself.</p>
+    <div class="actions"><button class="primary" data-go="adb">Start</button></div>
+  </section>
+
+  <!-- 1 -->
+  <section data-step="adb">
+    <h1>Switch on ADB debugging</h1>
+    <p class="lead">This lets the Mac install Couch TV. Use the TV remote:</p>
+    <ol class="howto">
+      <li>Open <b>Settings</b> (the gear at the right of the top row), then <b>My Fire TV</b>.</li>
+      <li>If you see <b>Developer options</b>, skip to step 4.</li>
+      <li>Open <b>About</b> and press the select button on your stick's name <b>seven times</b>. "You are now a developer" shows. Press Back.</li>
+      <li>Open <b>Developer options</b> and switch <b>ADB debugging</b> on. Say OK to the warning.</li>
+    </ol>
+    <div class="actions">
+      <button data-go="welcome">Back</button>
+      <button class="primary" data-go="find">Done, find my TV</button>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section data-step="find">
+    <h1>Find your TV</h1>
+    <p class="lead" id="find-status">Looking on your Wi-Fi…</p>
+    <div id="found" class="list"></div>
+    <details id="manual">
+      <summary>Type the address instead</summary>
+      <p class="small">On the TV: <b>Settings, My Fire TV, About, Network</b>. Type the <b>IP Address</b> it shows.</p>
+      <div class="row"><input id="ip" placeholder="192.168.1.23" inputmode="decimal" autocomplete="off"><button class="primary" id="ip-go">Use this</button></div>
+    </details>
+    <p class="hint" id="find-help" hidden>Nothing yet? Check the TV is on and on the same Wi-Fi, and that ADB debugging is on. If the Mac asked to "find devices on your local network", it needs <b>Allow</b> (System Settings, Privacy &amp; Security, Local Network).</p>
+    <div class="actions">
+      <button data-go="adb">Back</button>
+      <button id="rescan">Look again</button>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section data-step="allow">
+    <h1>Look at your TV</h1>
+    <div class="tvcard">
+      <div class="tvprompt">Allow USB debugging?<small>☑ Always allow from this computer</small><span>Allow</span></div>
+    </div>
+    <p class="lead" id="allow-status">Tick <b>Always allow from this computer</b>, then press <b>Allow</b>.</p>
+    <div class="actions"><button data-go="find">Back</button><button id="allow-retry" hidden class="primary">Try again</button></div>
+  </section>
+
+  <!-- 4 -->
+  <section data-step="install">
+    <h1 id="install-title">Install Couch TV</h1>
+    <p class="lead" id="device-line"></p>
+    <p id="install-status"></p>
+    <div class="bar"><i id="install-bar"></i></div>
+    <div id="install-replace" class="warn" hidden>
+      <p>This TV already has a Couch TV app that was built by someone else, so it cannot be updated in place. Replacing it is safe, but its settings (apps order, weather) start fresh.</p>
+      <button id="replace-go">Replace it</button>
+    </div>
+    <div class="actions">
+      <button id="install-skip" hidden>Keep the one on the TV</button>
+      <button class="primary" id="install-go">Install</button>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section data-step="home">
+    <h1>Make it your home screen</h1>
+    <p class="lead" id="home-status">Setting Couch TV as the home screen. The TV may flash for a moment.</p>
+    <div class="bar"><i id="home-bar"></i></div>
+    <div id="home-restart" class="warn" hidden>
+      <p>Almost: the TV needs one restart before Couch TV can catch the Home button. It takes about a minute.</p>
+      <button id="restart-go">Restart the TV</button>
+    </div>
+    <p class="hint" id="home-others" hidden></p>
+    <div class="actions"><button class="primary" id="home-next" hidden data-go="check">Next</button></div>
+  </section>
+
+  <!-- 6 -->
+  <section data-step="check">
+    <h1>Try it</h1>
+    <p class="lead" id="check-status">This presses Home on the TV for you. Couch TV should come up.</p>
+    <div class="actions">
+      <button class="primary" id="check-go">Press Home</button>
+      <button id="check-next" hidden data-go="pair">Next</button>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section data-step="pair">
+    <h1>Make it yours</h1>
+    <p class="lead">To change the home's settings from here, the Mac pairs with Couch TV like a phone remote would.</p>
+    <div class="row"><button class="primary" id="pair-start">Show a code on the TV</button></div>
+    <div id="pair-code" hidden>
+      <p>Type the 6 numbers on the TV:</p>
+      <div class="row"><input id="pin" maxlength="6" inputmode="numeric" placeholder="123456" autocomplete="off"><button class="primary" id="pin-go">Pair</button></div>
+    </div>
+    <p id="pair-status"></p>
+    <div class="actions"><button data-go="ads">Skip</button></div>
+  </section>
+
+  <!-- 8 -->
+  <section data-step="personalise">
+    <h1>Make it yours</h1>
+    <label>Your town or city, for the weather
+      <div class="row"><input id="city" placeholder="Accra" autocomplete="off"><button id="city-go">Search</button></div>
+    </label>
+    <div id="places" class="list"></div>
+    <label>Who watches? (optional, one name each)
+      <input id="people" placeholder="Ama, Kofi">
+    </label>
+    <p class="label">Your favourite apps go first. Tap in the order you want them:</p>
+    <div id="apps" class="chips"></div>
+    <p id="save-status"></p>
+    <div class="actions"><button data-go="ads">Skip</button><button class="primary" id="save-go">Save</button></div>
+  </section>
+
+  <!-- 9 -->
+  <section data-step="ads">
+    <h1>Switch off Amazon's adverts and tracking?</h1>
+    <p class="lead">Optional. These Amazon parts only show adverts, track what you watch or nag. They are switched off, not deleted, and the Undo button switches them back on.</p>
+    <ul id="ads" class="ads"></ul>
+    <p id="ads-status"></p>
+    <div class="actions">
+      <button id="ads-undo" hidden>Undo</button>
+      <button data-go="done">Skip</button>
+      <button class="primary" id="ads-go">Switch them off</button>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section data-step="done">
+    <h1>All done 🎉</h1>
+    <ul class="need">
+      <li><b>Move apps around:</b> hold the select button on an app.</li>
+      <li><b>More settings:</b> the gear tile at the end of your apps.</li>
+      <li><b>Amazon's home flashes up</b> for a moment when you press Home. That is normal on a Fire TV.</li>
+      <li><b>After a Couch TV update</b>, if Home goes to Amazon's home, restart the TV once.</li>
+      <li><b>To undo:</b> open the Couch TV app on the TV and choose <b>Stop being the home screen</b>.</li>
+    </ul>
+    <p class="small">You can switch ADB debugging off again now (Settings, My Fire TV, Developer options). Switch it back on if you ever run this setup again.</p>
+    <div class="actions"><button data-go="welcome">Set up another TV</button></div>
+  </section>
+
+  <p id="error" class="error" hidden></p>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
