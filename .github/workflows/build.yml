@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   mac:
-    runs-on: macos-14   # Apple silicon
+    runs-on: macos-latest   # Apple silicon (a fixed version is retired by GitHub sooner or later)
     steps:
       - uses: actions/checkout@v4
 
