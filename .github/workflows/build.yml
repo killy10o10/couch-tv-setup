@@ -1,0 +1,51 @@
+name: Build the Mac app
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write   # only used to attach the app to a release on a v* tag
+
+jobs:
+  mac:
+    runs-on: macos-latest   # Apple silicon (a fixed version is retired by GitHub sooner or later)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -r requirements.txt pyinstaller==6.16.0
+
+      - name: Tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build Couch TV Setup.app
+        run: |
+          pyinstaller --noconfirm --windowed --name "Couch TV Setup" \
+            --osx-bundle-identifier dev.couchtv.setup \
+            --add-data "couchtv_setup/web:couchtv_setup/web" \
+            --collect-data certifi \
+            couch-tv-setup.py
+          APP="dist/Couch TV Setup.app"
+          # No Dock icon or window of its own: the setup is the browser page, and the app
+          # stops by itself a few minutes after the page is closed.
+          plutil -insert LSUIElement -bool true "$APP/Contents/Info.plist"
+          codesign --force --deep --sign - "$APP"
+          ditto -c -k --keepParent "$APP" "dist/Couch-TV-Setup-mac.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Couch-TV-Setup-mac
+          path: dist/Couch-TV-Setup-mac.zip
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/Couch-TV-Setup-mac.zip --title "$GITHUB_REF_NAME" --generate-notes || gh release upload "$GITHUB_REF_NAME" dist/Couch-TV-Setup-mac.zip --clobber
