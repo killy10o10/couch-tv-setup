@@ -49,16 +49,29 @@ In `~/Library/Application Support/Couch TV Setup/`:
 - `adbkey`: the key the TV allows ("Always allow from this computer"). Delete it and the TV asks
   again next time.
 - `switched-off.json`: which ad apps it switched off on which TV, so Undo only switches those back on.
+  The same list is kept on the TV (`/data/local/tmp/couchtv-setup/switched-off.txt`), so Undo works
+  from any computer.
 
 The downloaded app is cached in `~/Library/Caches/Couch TV Setup/`. Nothing is sent anywhere
 except the download from GitHub and the place search (open-meteo.com) for the weather.
 
 ## Undo
 
-- **Couch TV:** on the TV, open the Couch TV app and choose **Stop being the home screen**, or
-  uninstall it (Settings, Applications, Manage installed applications).
-- **Ads and tracking:** run the setup again and press **Undo** on that step.
-- **ADB debugging:** Settings, My Fire TV, Developer options. You can switch it off once you are done.
+**Undo Couch TV** on the first screen puts the TV back the way Amazon set it up. It connects like
+the setup (ADB debugging on, press Allow), shows exactly what it will change, then:
+
+- takes Couch TV off the Home button and uninstalls it (its two grants go with it)
+- takes its Home watcher out of the accessibility list, keeping any other app's
+- switches every ad and tracking app on the setup's list back on, whoever switched it off
+- presses Home and checks Amazon's home comes up (if another launcher such as Projectivy takes the
+  Home button instead, it says so)
+
+Other apps, sign-ins and settings are left alone. Afterwards, switch **ADB debugging** off again
+(Settings, My Fire TV, Developer options).
+
+By hand, with the TV remote: open the Couch TV app and choose **Stop being the home screen**, or
+uninstall it (Settings, Applications, Manage installed applications). The ad apps stay off until
+the setup's Undo switches them back on (or a factory reset).
 
 ## For developers
 
@@ -88,7 +101,11 @@ with an accessibility "watcher" whenever Amazon's home comes up. The setup:
 
 1. `pm grant dev.couchtv.ontv android.permission.WRITE_SECURE_SETTINGS` and
    `appops set dev.couchtv.ontv SYSTEM_ALERT_WINDOW allow` (the two one-off grants).
-2. `pm enable dev.couchtv.ontv/.HomeAlias`, the same switch as "Use as home screen" in the app.
+2. Presses the app's own **Use as home screen** button. Fire OS refuses
+   `pm enable dev.couchtv.ontv/.HomeAlias` from ADB ("Shell cannot change component state"), so the
+   setup opens Couch TV's setup screen, reads it with `uiautomator dump`, moves the highlight with
+   the D-pad and presses select only once the highlighted button reads exactly "Use as home
+   screen". If the screen cannot be read, the page asks the person to press it with the remote.
 3. Restarts the app, which then switches its watcher on itself (it needs the grant for that).
    If it did not, the setup adds the watcher to `enabled_accessibility_services`, keeping
    whatever else is there.

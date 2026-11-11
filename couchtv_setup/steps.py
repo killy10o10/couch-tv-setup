@@ -2,12 +2,13 @@
 step twice is safe, and a TV that is already set up is left as it is."""
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
 
 from . import paths
-from .tv import TvError
+from .tv import TMP, TvError
 
 PKG = "dev.couchtv.ontv"
 WATCHER = f"{PKG}/{PKG}.WatchService"
@@ -141,7 +142,8 @@ def install(tv, apk, replace=False, progress=lambda f, msg=None: None):
 
 def make_home(tv, progress=lambda f, msg=None: None):
     """The two grants, "Use as home screen" on, and the Home watcher on and running. Only what is
-    missing is changed. Returns what was done and whether the watcher is running."""
+    missing is changed. Returns what was done, whether "Use as home screen" is on (if not, the
+    person presses it with the remote), and whether the watcher is running."""
     done = []
     state = app_state(tv)
     if not state.get("installed"):
@@ -153,10 +155,15 @@ def make_home(tv, progress=lambda f, msg=None: None):
     if "allow" not in tv.shell(f"appops get {PKG} SYSTEM_ALERT_WINDOW"):
         tv.shell(f"appops set {PKG} SYSTEM_ALERT_WINDOW allow")
         done.append("overlay")
-    if not state["home_on"]:
-        tv.shell(f"pm enable {PKG}/.HomeAlias")
-        done.append("home")
-    if done:
+    home_on = state["home_on"]
+    if not home_on:
+        # Fire OS does not let ADB switch the home alias on ("Shell cannot change component
+        # state"), so press the app's own button, as the remote would.
+        progress(0.3, "Pressing Use as home screen on the TV")
+        home_on = press_use_as_home(tv)
+        if home_on:
+            done.append("home")
+    elif done:
         # A fresh start makes the app switch its watcher on (it does that when it starts).
         progress(0.4, "Starting Couch TV")
         tv.shell(f"am force-stop {PKG}; am start -n {PKG}/.SetupActivity")
@@ -174,7 +181,47 @@ def make_home(tv, progress=lambda f, msg=None: None):
             break
         time.sleep(1)
     progress(1.0, "Done")
-    return {"changed": done, "watcher_running": bound, "other_watchers": other_watchers(tv)}
+    return {"changed": done, "home_on": home_on, "watcher_running": bound, "other_watchers": other_watchers(tv)}
+
+
+USE_HOME = "Use as home screen"
+STOP_HOME = "Stop being the home screen"
+
+
+def setup_buttons(tv):
+    """The buttons on Couch TV's setup screen, in order, as (text, focused)."""
+    xml = tv.shell("uiautomator dump /data/local/tmp/couchtv-ui.xml >/dev/null 2>&1; "
+                   "cat /data/local/tmp/couchtv-ui.xml; rm -f /data/local/tmp/couchtv-ui.xml", 30)
+    out = []
+    for node in re.findall(r"<node [^>]*>", xml):
+        if 'class="android.widget.Button"' in node and f'package="{PKG}"' in node:
+            text = re.search(r'text="([^"]*)"', node)
+            out.append((text.group(1) if text else "", 'focused="true"' in node))
+    return out
+
+
+def press_use_as_home(tv):
+    """Opens Couch TV's setup screen and presses its "Use as home screen" button with the D-pad.
+    It only ever presses select once the highlighted button reads exactly "Use as home screen",
+    so it can never land on Forget phones. Returns whether the switch is on afterwards."""
+    tv.shell(f"am force-stop {PKG}; am start -n {PKG}/.SetupActivity")
+    time.sleep(3)
+    for _ in range(8):
+        buttons = setup_buttons(tv)
+        texts = [t for t, _ in buttons]
+        focused = next((i for i, (_, f) in enumerate(buttons) if f), None)
+        if STOP_HOME in texts:
+            return True
+        if USE_HOME not in texts or focused is None:
+            return False
+        target = texts.index(USE_HOME)
+        if focused == target:
+            tv.shell("input keyevent KEYCODE_DPAD_CENTER")
+            time.sleep(2)
+            return app_state(tv).get("home_on", False)
+        tv.shell("input keyevent KEYCODE_DPAD_" + ("RIGHT" if target > focused else "LEFT"))
+        time.sleep(0.6)
+    return False
 
 
 def _watcher_listed(tv):
@@ -182,7 +229,11 @@ def _watcher_listed(tv):
 
 
 def watcher_running(tv):
-    return "Couch TV home watch" in tv.shell("dumpsys accessibility | grep -i 'Bound services'")
+    """Whether Fire OS is running the watcher. The "Bound services" list runs over several lines
+    when more than one service is bound (another launcher's, say), so read the whole list."""
+    out = tv.shell("dumpsys accessibility")
+    bound = out.split("Bound services:", 1)[1].split("Enabled services:", 1)[0] if "Bound services:" in out else ""
+    return "Couch TV home watch" in bound
 
 
 def other_watchers(tv):
@@ -200,6 +251,15 @@ def restart(tv):
     except Exception:
         pass
     tv.close()
+
+
+def refresh_home(tv):
+    """The home only reads its settings and app order again when it comes back on screen (the
+    app's onResume), so saving while it is showing changes nothing visible. Opening Couch TV's
+    setup screen and pressing Home brings it back, and it shows the new settings at once."""
+    tv.shell(f"am start -n {PKG}/.SetupActivity")
+    time.sleep(1.5)
+    tv.shell("input keyevent KEYCODE_HOME")
 
 
 def go_home(tv):
@@ -226,35 +286,61 @@ def _record():
     return paths.data() / "switched-off.json"
 
 
+# The same list is kept on the TV too, so Undo works from any computer, not only the one that
+# switched them off. /data/local/tmp belongs to ADB's shell user and survives restarts.
+TV_RECORD = "/data/local/tmp/couchtv-setup/switched-off.txt"
+
+
+def _tv_record(tv):
+    return {l.strip() for l in tv.shell(f"cat {TV_RECORD} 2>/dev/null").splitlines() if l.strip().startswith("com.")}
+
+
+def _save_tv_record(tv, pkgs):
+    if pkgs:
+        tv.shell(f"mkdir -p {TV_RECORD.rsplit('/', 1)[0]}; printf '%s\\n' {' '.join(sorted(pkgs))} > {TV_RECORD}")
+    else:
+        tv.shell(f"rm -f {TV_RECORD}")
+
+
+def _mine(tv, serial):
+    return set(_load_record().get(serial, [])) | _tv_record(tv)
+
+
+def _save_mine(tv, serial, pkgs):
+    rec = _load_record()
+    if pkgs:
+        rec[serial] = sorted(pkgs)
+    else:
+        rec.pop(serial, None)
+    _record().write_text(json.dumps(rec, indent=1))
+    _save_tv_record(tv, pkgs)
+
+
 def ads_state(tv, serial=None):
     """Each ad or tracking app on this TV: off or on, and "mine" when this setup switched it off
     (only those come back on with Undo)."""
     off = {l.replace("package:", "").strip() for l in tv.shell("pm list packages -d").splitlines()}
     there = {l.replace("package:", "").strip() for l in tv.shell("pm list packages").splitlines()}
-    mine = set(_load_record().get(serial, [])) if serial else set()
+    mine = _mine(tv, serial) if serial else set()
     return [{"package": p, "what": w, "off": p in off, "mine": p in mine} for p, w in ADS if p in there]
 
 
 def ads_off(tv, serial):
-    rec = _load_record()
-    mine = set(rec.get(serial, []))
+    mine = _mine(tv, serial)
     for item in ads_state(tv):
         if not item["off"]:
             out = tv.shell(f"pm disable-user --user 0 {item['package']}")
             if "disabled" in out:
                 mine.add(item["package"])
-    rec[serial] = sorted(mine)
-    _record().write_text(json.dumps(rec, indent=1))
+    _save_mine(tv, serial, mine)
     return ads_state(tv, serial)
 
 
 def ads_undo(tv, serial):
     """Switches back on what this setup switched off on this TV (and nothing else)."""
-    rec = _load_record()
-    for p in rec.get(serial, []):
+    for p in sorted(_mine(tv, serial)):
         tv.shell(f"pm enable {p}")
-    rec.pop(serial, None)
-    _record().write_text(json.dumps(rec, indent=1))
+    _save_mine(tv, serial, set())
     return ads_state(tv, serial)
 
 
@@ -267,3 +353,58 @@ def _load_record():
 
 def serial(tv):
     return tv.prop("ro.serialno") or tv.ip
+
+
+# ---- 5. undo everything ----
+
+AMAZON_HOME = "com.amazon.tv.launcher"
+
+
+def undo_plan(tv, serial):
+    """What Undo everything would change on this TV, to show before it runs."""
+    return {
+        "app": app_state(tv),
+        "ads_off": [a["what"] for a in ads_state(tv, serial) if a["off"]],
+        "watcher_listed": _watcher_listed(tv),
+    }
+
+
+def undo_everything(tv, serial, progress=lambda f, msg=None: None):
+    """Back to Amazon's own home: Couch TV out of the Home button and uninstalled (which also
+    removes its grants), its watcher out of the accessibility list (others kept), and every ad
+    and tracking app on the setup's list switched back on, whoever switched it off. Leaves
+    everything else alone, including other launchers."""
+    done = []
+    progress(0.1, "Taking Couch TV off the Home button")
+    cur = tv.shell("settings get secure enabled_accessibility_services").strip()
+    if WATCHER in cur.split(":"):
+        rest = [s for s in cur.split(":") if s and s != WATCHER and s != "null"]
+        if rest:
+            tv.shell(f"settings put secure enabled_accessibility_services '{':'.join(rest)}'")
+        else:
+            tv.shell("settings delete secure enabled_accessibility_services; settings put secure accessibility_enabled 0")
+        done.append("watcher")
+    progress(0.3, "Removing Couch TV")
+    if app_state(tv).get("installed"):
+        out = tv.shell(f"pm uninstall {PKG}", 120)
+        if "Success" not in out:
+            raise TvError("The TV did not remove Couch TV: " + out.strip()[-200:], "uninstall_failed")
+        done.append("uninstalled")
+    progress(0.6, "Switching Amazon's apps back on")
+    back_on = []
+    for item in ads_state(tv, serial):
+        if item["off"]:
+            tv.shell(f"pm enable {item['package']}")
+            back_on.append(item["what"])
+    _save_mine(tv, serial, set())
+    tv.shell(f"rm -rf {TMP.rsplit('/', 1)[0]}/couchtv-setup*")
+    progress(0.8, "Checking Amazon's home comes back")
+    tv.shell("input keyevent KEYCODE_HOME")
+    home = False
+    for _ in range(8):
+        time.sleep(1)
+        if AMAZON_HOME in tv.shell("dumpsys activity activities 2>/dev/null | grep -m1 mResumedActivity"):
+            home = True
+            break
+    progress(1.0, "Done")
+    return {"changed": done, "back_on": back_on, "amazon_home": home, "other_watchers": other_watchers(tv)}
