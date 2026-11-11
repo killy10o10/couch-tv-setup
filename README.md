@@ -41,7 +41,7 @@ app: right-click it, choose **Open**, then **Open** again (or System Settings, P
 a private Python folder for itself, then opens the setup in your browser.
 
 When macOS asks to **find devices on your local network**, press **Allow**: that is how it reaches
-the TV. The app has no window of its own; it stops by itself a few minutes after you close the page.
+the TV. The app has no window of its own. When you are done, press **Close setup** on the last screen to stop it straight away; if you just close the tab, it stops by itself about 3 minutes later.
 
 ## What it keeps on the Mac
 

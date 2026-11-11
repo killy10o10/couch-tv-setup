@@ -329,8 +329,19 @@
     }, showError);
   };
 
+  // ---- close ----
+  var closed = false;
+  $("quit-go").onclick = function () {
+    $("quit-go").disabled = true;
+    call("/api/quit", {}).then(function () {
+      closed = true;
+      go("closed");
+      document.getElementById("dots").style.visibility = "hidden";
+    }, function (e) { $("quit-go").disabled = false; showError(e); });
+  };
+
   // Tells the Mac side this page is still open (it stops by itself a few minutes after it closes).
-  setInterval(function () { call("/api/ping").catch(function () {}); }, 20000);
+  setInterval(function () { if (!closed) call("/api/ping").catch(function () {}); }, 20000);
   call("/api/ping").catch(function () {});
 
   // #adb, #find, #allow or #done open that step straight away (handy for the README's pictures).

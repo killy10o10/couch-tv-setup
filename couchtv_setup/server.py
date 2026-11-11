@@ -30,6 +30,7 @@ class State:
         self.apk = None
         self.lock = threading.Lock()
         self.job = {"running": False}
+        self.httpd = None
 
 
 S = State()
@@ -77,6 +78,12 @@ def need_tv():
 def api(method, path, body):
     SEEN["last"] = time.time()
     if path == "/api/ping":
+        return {"ok": True}
+    if path == "/api/quit":
+        # The "Close setup" button. Answers first, then stops the server a moment later.
+        if S.job.get("running"):
+            raise TvError("Still busy with the last step. Wait for it to finish, then close.", "busy")
+        threading.Timer(0.5, S.httpd.shutdown).start()
         return {"ok": True}
     if path == "/api/job":
         return S.job
@@ -194,6 +201,7 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     port = int(os.environ.get("COUCHTV_SETUP_PORT") or 0)
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    S.httpd = httpd
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
     print(f"Couch TV Setup is open in your browser: {url}")
     print("Keep this window open until you are done. Close it (or press Ctrl+C) to stop.")
