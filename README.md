@@ -1,8 +1,9 @@
 # Couch TV Setup
 
-Puts [couch-tv](https://github.com/Seagey/couch-tv) on a **Fire TV Stick** from a Mac, with no
-command line and no AI agent. It opens as a page in your browser and walks you through it: switch on
-ADB debugging with the TV remote, press **Allow** on the TV, and the Mac does the rest.
+Puts [couch-tv](https://github.com/Seagey/couch-tv) on a **Fire TV Stick** from a **Mac or a
+Windows PC**, with no command line and no AI agent. It opens as a page in your browser and walks you
+through it: switch on ADB debugging with the TV remote, press **Allow** on the TV, and the computer
+does the rest.
 
 ![Welcome](docs/welcome.jpg)
 
@@ -16,7 +17,7 @@ ADB debugging with the TV remote, press **Allow** on the TV, and the Mac does th
 |---|---|---|
 | 1. ADB debugging | Step-by-step instructions for Developer options | You, with the remote |
 | 2. Find your TV | Looks for the stick on your Wi-Fi, or you type its address | Nothing |
-| 3. Allow | The Mac asks to connect | You press **Allow** once |
+| 3. Allow | The computer asks to connect | You press **Allow** once |
 | 4. Install | Downloads the newest `couch-tv-ontv.apk` from couch-tv's Releases page and installs it | Nothing |
 | 5. Home screen | The two one-off grants, "Use as home screen" switched on, and the Home watcher checked | Nothing (may flash) |
 | 6. Try it | Presses Home and checks Couch TV comes up | Watch it |
@@ -32,27 +33,45 @@ already set up changes nothing.
 
 ## Use it
 
-**Download** `Couch-TV-Setup-mac.zip` from this repo's Releases page (or the latest build under
-Actions), unzip it, and open **Couch TV Setup**. The first time, macOS says it cannot check the
-app: right-click it, choose **Open**, then **Open** again (or System Settings, Privacy & Security,
-**Open Anyway**). It is not signed with an Apple developer account yet.
+Download the zip for your computer from the [latest release](https://github.com/killy10o10/couch-tv-setup/releases/latest)
+and unzip it:
 
-**Or from this folder:** double-click `run.command` (the first time: right-click, Open). It makes
-a private Python folder for itself, then opens the setup in your browser.
+| Computer | Download | Open |
+|---|---|---|
+| Mac with Apple silicon (M1 and newer) | `Couch-TV-Setup-mac-apple-silicon.zip` | **Couch TV Setup** |
+| Mac with an Intel chip | `Couch-TV-Setup-mac-intel.zip` | **Couch TV Setup** |
+| Windows 10 or 11 | `Couch-TV-Setup-windows.zip` | **Couch TV Setup.exe**, inside the unzipped folder |
 
-When macOS asks to **find devices on your local network**, press **Allow**: that is how it reaches
-the TV. The app has no window of its own. When you are done, press **Close setup** on the last screen to stop it straight away; if you just close the tab, it stops by itself about 3 minutes later.
+Not sure which Mac? Apple menu, **About This Mac**: "Chip: Apple M…" is Apple silicon, "Processor:
+… Intel" is Intel.
 
-## What it keeps on the Mac
+The apps are not signed with a paid developer account yet, so the first time:
+- **Mac:** macOS says it cannot check the app. Right-click it, choose **Open**, then **Open** again
+  (or System Settings, Privacy & Security, **Open Anyway**). When it asks to **find devices on your
+  local network**, press **Allow**: that is how it reaches the TV.
+- **Windows:** "Windows protected your PC" (SmartScreen). Press **More info**, then **Run anyway**.
+  Keep `Couch TV Setup.exe` in its folder: it needs the `_internal` folder next to it.
 
-In `~/Library/Application Support/Couch TV Setup/`:
+The app has no window of its own: the setup is the page in your browser. When you are done, press
+**Close setup** on the last screen to stop it straight away; if you just close the tab, it stops by
+itself about 3 minutes later.
+
+**Or from this folder** (needs Python 3.9 or newer): on a Mac double-click `run.command` (the first
+time: right-click, Open); on Windows double-click `run.bat`. Either makes a private Python folder for
+itself, then opens the setup in your browser.
+
+## What it keeps on the computer
+
+Its own folder: `~/Library/Application Support/Couch TV Setup/` on a Mac,
+`%APPDATA%\Couch TV Setup\` on Windows:
 - `adbkey`: the key the TV allows ("Always allow from this computer"). Delete it and the TV asks
   again next time.
 - `switched-off.json`: which ad apps it switched off on which TV, so Undo only switches those back on.
   The same list is kept on the TV (`/data/local/tmp/couchtv-setup/switched-off.txt`), so Undo works
   from any computer.
 
-The downloaded app is cached in `~/Library/Caches/Couch TV Setup/`. Nothing is sent anywhere
+The downloaded app is cached in `~/Library/Caches/Couch TV Setup/` (Mac) or
+`%LOCALAPPDATA%\Couch TV Setup\Cache\` (Windows). Nothing is sent anywhere
 except the download from GitHub and the place search (open-meteo.com) for the weather.
 
 ## Undo
@@ -90,9 +109,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 | `COUCHTV_SETUP_HOME` | Keep the setup's own files somewhere else |
 
 The ADB side is pure Python (`adb-shell`), adapted from couch-tv's `tv-home/tools/tvadb.py`, so
-it needs no Google `adb` and no extra Local Network permission for it. The Mac app is built by
-GitHub Actions with PyInstaller (`.github/workflows/build.yml`) on every push; a `v*` tag attaches
-it to a release.
+it needs no Google `adb` and no extra Local Network permission for it. GitHub Actions builds the
+three apps with PyInstaller on every push (`.github/workflows/build.yml`): Apple silicon Mac, Intel
+Mac and Windows. Each job runs the tests, builds the app, then starts it and checks it serves the
+page and stops on Close setup (`tests/smoke.py`). A `v*` tag attaches all three to a release.
 
 ### How it makes Couch TV the home screen
 

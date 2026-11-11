@@ -1,4 +1,4 @@
-"""A small web server on this Mac only (127.0.0.1) that serves the setup page and runs the steps.
+"""A small web server on this computer only (127.0.0.1) that serves the setup page and runs the steps.
 
 Slow steps (waiting for Allow, downloading, copying the app) run as a job in the background; the
 page asks GET /api/job how it is going.
@@ -39,6 +39,7 @@ IDLE_S = 180          # the page asks every 20 s; this long without it means the
 FIRST_S = 600         # time to open the page at all
 # Only this page may call the API: other websites open in the browser cannot guess it.
 SECRET = secrets.token_urlsafe(16)
+OS = "mac" if sys.platform == "darwin" else "windows" if sys.platform == "win32" else "linux"
 
 
 def run_job(name, fn):
@@ -203,6 +204,7 @@ class Handler(BaseHTTPRequestHandler):
         raw = f.read_bytes()
         if name == "index.html":
             raw = raw.replace(b"__SETUP_KEY__", SECRET.encode())
+            raw = raw.replace(b"__SETUP_OS__", OS.encode())
         self._send(200, raw, TYPES.get(f.suffix, "application/octet-stream"))
 
 
@@ -217,7 +219,7 @@ def main():
         webbrowser.open(url)
 
     def stop_when_closed():
-        # The Mac app has no window of its own: it stops by itself once the page is closed.
+        # The app has no window of its own: it stops by itself once the page is closed.
         while True:
             time.sleep(10)
             now = time.time()

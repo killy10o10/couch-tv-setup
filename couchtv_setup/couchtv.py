@@ -1,6 +1,7 @@
 """The on-TV app's own API (port 5400): pairing with the code shown on the TV, then the home's
 settings (weather, country, names, dock). The same calls the phone remote makes."""
 import json
+import sys
 import urllib.error
 import urllib.request
 
@@ -39,7 +40,7 @@ class CouchTv:
         return self.call("POST", "/api/pair/start", {})
 
     def pair(self, pin):
-        r = self.call("POST", "/api/pair", {"pin": pin.strip(), "name": "Couch TV Setup (Mac)"})
+        r = self.call("POST", "/api/pair", {"pin": pin.strip(), "name": "Couch TV Setup (" + ("Mac" if sys.platform == "darwin" else "Windows" if sys.platform == "win32" else "computer") + ")"})
         self.token = r["token"]
         return self.token
 
