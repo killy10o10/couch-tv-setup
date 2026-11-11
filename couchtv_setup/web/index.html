@@ -162,7 +162,17 @@
       <li><b>To undo:</b> open the Couch TV app on the TV and choose <b>Stop being the home screen</b>.</li>
     </ul>
     <p class="small">You can switch ADB debugging off again now (Settings, My Fire TV, Developer options). Switch it back on if you ever run this setup again.</p>
-    <div class="actions"><button data-go="welcome">Set up another TV</button></div>
+    <div class="actions">
+      <button data-go="welcome">Set up another TV</button>
+      <button class="primary" id="quit-go">Close setup</button>
+    </div>
+  </section>
+
+  <!-- shown after Close setup -->
+  <section data-step="closed">
+    <h1>Setup is closed</h1>
+    <p class="lead">Couch TV Setup has stopped on this Mac. You can close this tab.</p>
+    <p class="small">To run it again, open the Couch TV Setup app.</p>
   </section>
 
   <p id="error" class="error" hidden></p>
