@@ -1,11 +1,14 @@
 (function () {
   "use strict";
   var KEY = document.querySelector('meta[name="setup-key"]').content;
+  // Show only the help that fits this computer (mac, windows or linux).
+  var OS = document.querySelector('meta[name="setup-os"]').content;
+  document.querySelectorAll("[data-os]").forEach(function (el) { el.hidden = el.dataset.os !== OS; });
   var STEPS = ["welcome", "adb", "find", "allow", "install", "home", "check", "pair", "personalise", "ads", "done"];
   var $ = function (id) { return document.getElementById(id); };
   var state = { ip: null, device: null, picks: [], place: null, mode: "setup" };
 
-  // ---- talking to the Mac side ----
+  // ---- talking to the setup program on this computer ----
   function call(path, body) {
     return fetch(path, {
       method: body === undefined ? "GET" : "POST",
@@ -275,7 +278,7 @@
           box.appendChild(b);
         });
         if (!box.children.length) box.textContent = "No place found by that name.";
-      }, function () { $("places").textContent = "Could not search. Is this Mac online?"; });
+      }, function () { $("places").textContent = "Could not search. Is this computer online?"; });
   };
   $("city").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); $("city-go").click(); } });
   $("save-go").onclick = function () {
@@ -387,7 +390,7 @@
     }, function (e) { $("undo-go").disabled = false; showError(e); });
   };
 
-  // Tells the Mac side this page is still open (it stops by itself a few minutes after it closes).
+  // Tells the setup program this page is still open (it stops by itself a few minutes after it closes).
   setInterval(function () { if (!closed) call("/api/ping").catch(function () {}); }, 20000);
   call("/api/ping").catch(function () {});
 

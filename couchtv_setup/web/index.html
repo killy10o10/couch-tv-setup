@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Couch TV Setup</title>
 <meta name="setup-key" content="__SETUP_KEY__">
+<meta name="setup-os" content="__SETUP_OS__">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -21,9 +22,9 @@
     <p class="lead">A clean home screen with no adverts, your apps up front, the time and the weather. About ten minutes, and you can undo all of it.</p>
     <ul class="need">
       <li><b>Your Fire TV Stick</b>, switched on, with its remote.</li>
-      <li><b>This Mac on the same Wi-Fi</b> as the TV.</li>
+      <li><b>This computer on the same Wi-Fi</b> as the TV.</li>
     </ul>
-    <p class="small">This Mac is only needed today. Once it is set up, Couch TV runs on the TV by itself.</p>
+    <p class="small">This computer is only needed today. Once it is set up, Couch TV runs on the TV by itself.</p>
     <div class="actions">
       <button id="undo-start">Undo Couch TV</button>
       <button class="primary" id="setup-start">Start</button>
@@ -33,7 +34,7 @@
   <!-- 1 -->
   <section data-step="adb">
     <h1>Switch on ADB debugging</h1>
-    <p class="lead">This lets the Mac make the changes on the TV. Use the TV remote:</p>
+    <p class="lead">This lets this computer make the changes on the TV. Use the TV remote:</p>
     <ol class="howto">
       <li>Open <b>Settings</b> (the gear at the right of the top row), then <b>My Fire TV</b>.</li>
       <li>If you see <b>Developer options</b>, skip to step 4.</li>
@@ -56,7 +57,7 @@
       <p class="small">On the TV: <b>Settings, My Fire TV, About, Network</b>. Type the <b>IP Address</b> it shows.</p>
       <div class="row"><input id="ip" placeholder="192.168.1.23" inputmode="decimal" autocomplete="off"><button class="primary" id="ip-go">Use this</button></div>
     </details>
-    <p class="hint" id="find-help" hidden>Nothing yet? Check the TV is on and on the same Wi-Fi, and that ADB debugging is on. If the Mac asked to "find devices on your local network", it needs <b>Allow</b> (System Settings, Privacy &amp; Security, Local Network).</p>
+    <p class="hint" id="find-help" hidden>Nothing yet? Check the TV is on and on the same Wi-Fi as this computer, and that ADB debugging is on.<span data-os="mac"> If the Mac asked to "find devices on your local network", it needs <b>Allow</b> (System Settings, Privacy &amp; Security, Local Network).</span><span data-os="windows"> If Windows asked whether to allow Couch TV Setup on networks, it needs <b>Allow</b>. A guest or "Public" Wi-Fi can keep devices apart: use your home Wi-Fi.</span></p>
     <div class="actions">
       <button data-go="adb">Back</button>
       <button id="rescan">Look again</button>
@@ -119,7 +120,7 @@
   <!-- 7 -->
   <section data-step="pair">
     <h1>Make it yours</h1>
-    <p class="lead">To change the home's settings from here, the Mac pairs with Couch TV like a phone remote would.</p>
+    <p class="lead">To change the home's settings from here, this computer pairs with Couch TV like a phone remote would.</p>
     <div class="row"><button class="primary" id="pair-start">Show a code on the TV</button></div>
     <div id="pair-code" hidden>
       <p>Type the 6 numbers on the TV:</p>
@@ -200,7 +201,7 @@
   <!-- shown after Close setup -->
   <section data-step="closed">
     <h1>Setup is closed</h1>
-    <p class="lead">Couch TV Setup has stopped on this Mac. You can close this tab.</p>
+    <p class="lead">Couch TV Setup has stopped on this computer. You can close this tab.</p>
     <p class="small">To run it again, open the Couch TV Setup app.</p>
   </section>
 

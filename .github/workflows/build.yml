@@ -1,4 +1,4 @@
-name: Build the Mac app
+name: Build the apps
 
 on:
   push:
@@ -7,11 +7,24 @@ on:
   pull_request:
 
 permissions:
-  contents: write   # only used to attach the app to a release on a v* tag
+  contents: write   # only used to attach the apps to a release on a v* tag
 
 jobs:
-  mac:
-    runs-on: macos-latest   # Apple silicon (a fixed version is retired by GitHub sooner or later)
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: mac-apple-silicon
+            os: macos-latest          # Apple silicon (M1 and newer)
+          - name: mac-intel
+            os: macos-15-intel        # Intel Macs
+          - name: windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -25,27 +38,46 @@ jobs:
       - name: Tests
         run: python -m unittest discover -s tests -v
 
-      - name: Build Couch TV Setup.app
+      - name: Build
         run: |
+          SEP=$(python -c "import os; print(os.pathsep)")
           pyinstaller --noconfirm --windowed --name "Couch TV Setup" \
             --osx-bundle-identifier dev.couchtv.setup \
-            --add-data "couchtv_setup/web:couchtv_setup/web" \
+            --add-data "couchtv_setup/web${SEP}couchtv_setup/web" \
             --collect-data certifi \
             couch-tv-setup.py
+
+      - name: Package (Mac)
+        if: runner.os == 'macOS'
+        run: |
           APP="dist/Couch TV Setup.app"
           # No Dock icon or window of its own: the setup is the browser page, and the app
-          # stops by itself a few minutes after the page is closed.
+          # stops by itself when Close setup is pressed or a few minutes after the page closes.
           plutil -insert LSUIElement -bool true "$APP/Contents/Info.plist"
           codesign --force --deep --sign - "$APP"
-          ditto -c -k --keepParent "$APP" "dist/Couch-TV-Setup-mac.zip"
+          echo "PROGRAM=$APP/Contents/MacOS/Couch TV Setup" >> "$GITHUB_ENV"
+          ditto -c -k --keepParent "$APP" "dist/Couch-TV-Setup-${{ matrix.name }}.zip"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          # A folder with "Couch TV Setup.exe" in it (not one big .exe: those are flagged by
+          # antivirus programs far more often).
+          echo "PROGRAM=dist/Couch TV Setup/Couch TV Setup.exe" >> "$GITHUB_ENV"
+          python -c "import shutil; shutil.make_archive('dist/Couch-TV-Setup-${{ matrix.name }}', 'zip', 'dist', 'Couch TV Setup')"
+
+      - name: Smoke test the built app
+        run: python tests/smoke.py "$PROGRAM"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Couch-TV-Setup-mac
-          path: dist/Couch-TV-Setup-mac.zip
+          name: Couch-TV-Setup-${{ matrix.name }}
+          path: dist/Couch-TV-Setup-${{ matrix.name }}.zip
 
       - name: Attach to the release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/Couch-TV-Setup-mac.zip --title "$GITHUB_REF_NAME" --generate-notes || gh release upload "$GITHUB_REF_NAME" dist/Couch-TV-Setup-mac.zip --clobber
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes 2>/dev/null || true
+          gh release upload "$GITHUB_REF_NAME" "dist/Couch-TV-Setup-${{ matrix.name }}.zip" --clobber

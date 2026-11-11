@@ -52,7 +52,7 @@ class Tv:
             dev.connect(rsa_keys=[signer()], auth_timeout_s=allow_wait_s)
         except Exception as e:
             raise TvError(
-                "The TV did not let this Mac in. Check that ADB debugging is on, then press Allow "
+                "The TV did not let this computer in. Check that ADB debugging is on, then press Allow "
                 "on the TV (tick Always allow) and try again.", "not_allowed") from e
         self.dev = dev
 

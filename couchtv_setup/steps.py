@@ -104,7 +104,7 @@ def download(progress=lambda f, msg=None: None):
         with _open(RELEASES) as r:
             rel = json.load(r)
     except (urllib.error.URLError, OSError) as e:
-        raise TvError("Could not reach GitHub to download Couch TV. Is this Mac online?", "offline") from e
+        raise TvError("Could not reach GitHub to download Couch TV. Is this computer online?", "offline") from e
     asset = next((a for a in rel.get("assets", []) if a.get("name") == APK_NAME), None)
     if not asset:
         raise TvError("The newest Couch TV release has no on-TV app to download.", "no_asset")
