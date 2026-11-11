@@ -10,10 +10,10 @@ import os
 import time
 
 from adb_shell.adb_device import AdbDeviceTcp
-from adb_shell.auth.keygen import keygen
 from adb_shell.auth.sign_pythonrsa import PythonRSASigner
 
 from . import paths
+from .adbkey import keygen
 
 TMP = "/data/local/tmp/couchtv-setup"
 PART = 64 * 1024       # adb push part size

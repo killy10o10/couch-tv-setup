@@ -45,6 +45,7 @@ jobs:
             --osx-bundle-identifier dev.couchtv.setup \
             --add-data "couchtv_setup/web${SEP}couchtv_setup/web" \
             --collect-data certifi \
+            --exclude-module cryptography \
             couch-tv-setup.py
 
       - name: Package (Mac)

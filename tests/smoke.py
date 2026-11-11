@@ -26,8 +26,8 @@ def get(path, key=None, body=None):
 
 
 def main(program):
-    env = dict(os.environ, COUCHTV_SETUP_PORT=str(PORT), COUCHTV_SETUP_NO_BROWSER="1",
-               COUCHTV_SETUP_HOME=tempfile.mkdtemp())
+    home = tempfile.mkdtemp()
+    env = dict(os.environ, COUCHTV_SETUP_PORT=str(PORT), COUCHTV_SETUP_NO_BROWSER="1", COUCHTV_SETUP_HOME=home)
     proc = subprocess.Popen([program], env=env)
     try:
         page = None
@@ -44,10 +44,21 @@ def main(program):
         for f in ("style.css", "app.js"):
             assert len(get("/" + f)) > 1000, f + " is missing"
         assert json.loads(get("/api/ping", key))["ok"]
+        # Connecting to a TV that is not there still makes this computer's ADB key first, so this
+        # checks the key making and adb-shell work inside the built app.
+        get("/api/connect", key, {"ip": "127.0.0.1"})
+        for _ in range(30):
+            job = json.loads(get("/api/job", key))
+            if not job.get("running"):
+                break
+            time.sleep(1)
+        assert job.get("code") == "not_allowed", f"unexpected connect result: {job}"
+        for f in ("adbkey", "adbkey.pub"):
+            assert os.path.getsize(os.path.join(home, f)) > 300, f + " was not made"
         assert json.loads(get("/api/quit", key, {}))["ok"]
         code = proc.wait(timeout=20)
         assert code == 0, f"the app stopped with code {code}"
-        print(f"smoke ok: page, files and API answer ({os_name}), Close setup stops it")
+        print(f"smoke ok: page, files and API answer ({os_name}), ADB key made, Close setup stops it")
     finally:
         if proc.poll() is None:
             proc.kill()
