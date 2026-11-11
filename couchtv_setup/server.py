@@ -138,8 +138,16 @@ def api(method, path, body):
         return S.couch.apps()
     if path == "/api/personalise":
         need_tv()
-        return S.couch.personalise(body.get("weather"), body.get("country"), body.get("people"),
-                                   body.get("order"), body.get("line"))
+        result = S.couch.personalise(body.get("weather"), body.get("country"), body.get("people"),
+                                     body.get("order"), body.get("line"))
+        steps.refresh_home(S.tv)   # so the TV shows it now, not the next time the home opens
+        return result
+    if path == "/api/undo/plan":
+        tv = need_tv()
+        return steps.undo_plan(tv, steps.serial(tv))
+    if path == "/api/undo":
+        tv = need_tv()
+        return run_job("undo", lambda progress: steps.undo_everything(tv, steps.serial(tv), progress))
     if path == "/api/ads":
         tv = need_tv()
         action = body.get("action")

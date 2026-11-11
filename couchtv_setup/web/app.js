@@ -3,7 +3,7 @@
   var KEY = document.querySelector('meta[name="setup-key"]').content;
   var STEPS = ["welcome", "adb", "find", "allow", "install", "home", "check", "pair", "personalise", "ads", "done"];
   var $ = function (id) { return document.getElementById(id); };
-  var state = { ip: null, device: null, picks: [], place: null };
+  var state = { ip: null, device: null, picks: [], place: null, mode: "setup" };
 
   // ---- talking to the Mac side ----
   function call(path, body) {
@@ -96,7 +96,7 @@
         $("allow-status").innerHTML = "This is a <b>" + dev.name + "</b> (" + dev.os + "). This setup is made for Fire TV sticks, so it stops here.";
         return;
       }
-      go("install");
+      go(state.mode === "undo" ? "undo" : "install");
     }, function (e) {
       $("allow-status").textContent = e.message;
       $("allow-retry").hidden = false;
@@ -145,8 +145,11 @@
   $("install-skip").onclick = function () { go("home"); };
 
   // ---- home ----
+  var RESTART_LINE = $("restart-line").innerHTML;
   ENTER.home = function () {
+    $("home-press").hidden = true;
     $("home-restart").hidden = true;
+    $("restart-line").innerHTML = RESTART_LINE;
     $("home-next").hidden = true;
     $("home-others").hidden = true;
     $("home-bar").style.width = "0";
@@ -158,7 +161,10 @@
         $("home-others").hidden = false;
         $("home-others").innerHTML = "<b>" + r.other_watchers.join(" and ") + "</b> is also on this TV. If it is set to take over the Home button too, the two will fight: switch its override off in its own settings. It can stay installed.";
       }
-      if (r.watcher_running) {
+      if (!r.home_on) {
+        $("home-status").textContent = "";
+        $("home-press").hidden = false;
+      } else if (r.watcher_running) {
         $("home-status").innerHTML = '<span class="good">✓ Couch TV is your home screen.</span>';
         $("home-next").hidden = false;
       } else {
@@ -167,10 +173,11 @@
       }
     }, showError);
   };
+  $("home-pressed").onclick = function () { go("home"); };
   $("restart-go").onclick = function () {
     $("restart-go").disabled = true;
     call("/api/restart", {}).then(function () {
-      $("home-restart").querySelector("p").innerHTML = busy("Restarting the TV. This page carries on by itself when it is back…");
+      $("restart-line").innerHTML = busy("Restarting the TV. This page carries on by itself when it is back…");
       waitForTv(0);
     }, showError);
   };
@@ -195,9 +202,8 @@
         $("check-status").innerHTML = '<span class="good">✓ Couch TV came up. Try the Home button on your remote too.</span>';
         $("check-next").hidden = false;
       } else {
-        $("check-status").textContent = "Amazon's home stayed. Restarting the TV usually fixes it.";
-        go("home");
-        $("home-restart").hidden = false;
+        $("check-status").textContent = "Amazon's home stayed. Going back a step to fix it…";
+        setTimeout(function () { go("home"); }, 1500);
       }
     }, showError);
   };
@@ -283,7 +289,7 @@
     if (state.picks.length) { body.order = state.picks; body.line = Math.min(state.picks.length, 10); }
     $("save-status").innerHTML = busy("Saving…");
     call("/api/personalise", body).then(function () {
-      $("save-status").innerHTML = '<span class="good">✓ Saved. The TV shows it next time the home opens.</span>';
+      $("save-status").innerHTML = '<span class="good">✓ Saved. Have a look at your TV.</span>';
       setTimeout(function () { go("ads"); }, 900);
     }, function (e) { $("save-status").textContent = ""; showError(e); });
   };
@@ -331,13 +337,54 @@
 
   // ---- close ----
   var closed = false;
-  $("quit-go").onclick = function () {
-    $("quit-go").disabled = true;
-    call("/api/quit", {}).then(function () {
-      closed = true;
-      go("closed");
-      document.getElementById("dots").style.visibility = "hidden";
-    }, function (e) { $("quit-go").disabled = false; showError(e); });
+  document.querySelectorAll("[data-quit]").forEach(function (b) {
+    b.onclick = function () {
+      b.disabled = true;
+      call("/api/quit", {}).then(function () {
+        closed = true;
+        go("closed");
+        document.getElementById("dots").style.visibility = "hidden";
+      }, function (e) { b.disabled = false; showError(e); });
+    };
+  });
+
+  // ---- undo everything ----
+  $("setup-start").onclick = function () { state.mode = "setup"; go("adb"); };
+  $("undo-start").onclick = function () { state.mode = "undo"; go("adb"); };
+  ENTER.undo = function () {
+    var ul = $("undo-list");
+    ul.innerHTML = "<li>" + busy("Looking at the TV…") + "</li>";
+    $("undo-status").textContent = "";
+    $("undo-go").disabled = true;
+    $("undo-bar").parentNode.hidden = true;
+    $("undo-device").textContent = state.device ? state.device.name : "Fire TV";
+    call("/api/undo/plan", {}).then(function (p) {
+      var items = [];
+      if (p.app.installed) items.push("<b>Couch TV is removed</b>, and Amazon's home is on the Home button again.");
+      else if (p.watcher_listed) items.push("Couch TV's leftover <b>Home watcher</b> is switched off.");
+      if (p.ads_off.length) items.push("<b>" + p.ads_off.length + " Amazon apps are switched back on</b>: " + p.ads_off.join(", ") + ".");
+      if (!items.length) {
+        ul.innerHTML = "<li>Nothing to undo: Couch TV is not on this TV and Amazon's apps are all on.</li>";
+        return;
+      }
+      ul.innerHTML = items.map(function (t) { return "<li>" + t + "</li>"; }).join("");
+      $("undo-go").disabled = false;
+    }, showError);
+  };
+  $("undo-go").onclick = function () {
+    $("undo-go").disabled = true;
+    $("undo-bar").parentNode.hidden = false;
+    job("/api/undo", {}, function (f, msg) {
+      $("undo-bar").style.width = Math.round(f * 100) + "%";
+      if (msg) $("undo-status").innerHTML = busy(msg + "…");
+    }).then(function (r) {
+      $("undone-other").hidden = true;
+      if (!r.amazon_home && r.other_watchers.length) {
+        $("undone-other").hidden = false;
+        $("undone-other").innerHTML = "Couch TV is gone, but <b>" + r.other_watchers.join(" and ") + "</b> is still set to take over the Home button. Switch that off in its own settings, or uninstall it, to get Amazon's home.";
+      }
+      go("undone");
+    }, function (e) { $("undo-go").disabled = false; showError(e); });
   };
 
   // Tells the Mac side this page is still open (it stops by itself a few minutes after it closes).

@@ -25,6 +25,16 @@ class FakeTv:
         self.installed, self.grant, self.home, self.a11y, self.bound = installed, grant, home, a11y, bound
         self.disabled = set(disabled)
         self.log = []
+        self.record = ""
+        self.focus = 0            # the setup screen opens with Connect ADB highlighted
+        self.screen_ok = True     # False: the screen cannot be read
+
+    def _app_starts_watcher(self):
+        """The app switches its watcher on when it starts or the home button is pressed, once it
+        has the grant and "Use as home screen" is on."""
+        if self.grant and self.home and WATCHER not in self.a11y:
+            self.a11y = WATCHER if self.a11y == "null" else self.a11y + ":" + WATCHER
+            self.bound = True
 
     def prop(self, name):
         return {"ro.product.model": "AFTKM", "ro.product.manufacturer": "Amazon",
@@ -41,20 +51,38 @@ class FakeTv:
         if cmd.startswith("pm grant"):
             self.grant = True
         if cmd.startswith("pm enable dev.couchtv.ontv/.HomeAlias"):
-            self.home = True
+            return "java.lang.SecurityException: Shell cannot change component state"   # as Fire OS
+        if cmd.startswith("uiautomator dump"):
+            if not self.screen_ok:
+                return ""
+            names = ["Connect ADB", "New phone code", "Developer options",
+                     "Stop being the home screen" if self.home else "Use as home screen", "Forget phones"]
+            return "".join(f'<node class="android.widget.Button" package="dev.couchtv.ontv" text="{n}" '
+                           f'focused="{str(i == self.focus).lower()}" />' for i, n in enumerate(names))
+        if cmd == "input keyevent KEYCODE_DPAD_RIGHT":
+            self.focus = min(self.focus + 1, 4)
+        if cmd == "input keyevent KEYCODE_DPAD_LEFT":
+            self.focus = max(self.focus - 1, 0)
+        if cmd == "input keyevent KEYCODE_DPAD_CENTER":
+            self.pressed = getattr(self, "pressed", []) + [self.focus]
+            if self.focus == 3:
+                self.home = not self.home
+                self._app_starts_watcher()
         if cmd.startswith("appops get"):
             return "SYSTEM_ALERT_WINDOW: allow\n"
-        if cmd.startswith("am force-stop") and self.grant and self.home:
-            # the app switches its watcher on when it starts
-            self.a11y = WATCHER if self.a11y == "null" else self.a11y + ":" + WATCHER
-            self.bound = True
+        if cmd.startswith("am force-stop"):
+            self.focus = 0            # the setup screen opens with Connect ADB highlighted
+            self._app_starts_watcher()
         if cmd == "settings get secure enabled_accessibility_services":
             return self.a11y + "\n"
         if cmd.startswith("settings put secure enabled_accessibility_services"):
             self.a11y = cmd.split("'")[1]
             self.bound = True
         if cmd.startswith("dumpsys accessibility"):
-            return "Bound services:{Service[label=Couch TV home watch]}" if self.bound else "Bound services:{}"
+            # as Fire OS prints it: one service per line, another launcher's first
+            couch = "\n                     Service[label=Couch TV home watch]" if self.bound else ""
+            return ("     Bound services:{Service[label=Projectivy Launcher]," + couch + "}\n"
+                    "     Enabled services:{{dev.couchtv.ontv/dev.couchtv.ontv.WatchService}}\n")
         if cmd == "pm list packages -d":
             return "".join(f"package:{p}\n" for p in self.disabled)
         if cmd == "pm list packages":
@@ -65,6 +93,19 @@ class FakeTv:
             return f"Package {p} new state: disabled-user"
         if cmd.startswith("pm enable "):
             self.disabled.discard(cmd.split()[-1])
+        if cmd.startswith("cat " + steps.TV_RECORD):
+            return self.record
+        if "printf" in cmd and steps.TV_RECORD in cmd:
+            self.record = "\n".join(cmd.split("printf '%s\\n' ")[1].split(" > ")[0].split()) + "\n"
+        if cmd.startswith("rm -f " + steps.TV_RECORD):
+            self.record = ""
+        if cmd.startswith("pm uninstall"):
+            self.installed = False
+            return "Success"
+        if cmd.startswith("settings delete secure enabled_accessibility_services"):
+            self.a11y = "null"
+        if "mResumedActivity" in cmd:
+            return "mResumedActivity: ActivityRecord{1 u0 com.amazon.tv.launcher/.ui.HomeActivity_vNext}"
         return ""
 
 
@@ -82,6 +123,19 @@ class Steps(unittest.TestCase):
         self.assertEqual(r["changed"], ["grant", "home"])
         self.assertTrue(r["watcher_running"])
         self.assertIn("pm grant dev.couchtv.ontv android.permission.WRITE_SECURE_SETTINGS", tv.log)
+
+    def test_use_as_home_is_pressed_never_forget_phones(self):
+        tv = FakeTv(grant=True)
+        r = steps.make_home(tv)
+        self.assertTrue(r["home_on"])
+        self.assertEqual(tv.pressed, [3])            # select pressed once, on Use as home screen
+
+    def test_unreadable_screen_asks_the_person(self):
+        tv = FakeTv(grant=True)
+        tv.screen_ok = False
+        r = steps.make_home(tv)
+        self.assertFalse(r["home_on"])
+        self.assertFalse(getattr(tv, "pressed", []))  # nothing pressed blind
 
     def test_set_up_tv_is_left_alone(self):
         tv = FakeTv(grant=True, home=True, a11y="com.other/.Svc:" + WATCHER, bound=True)
@@ -104,6 +158,32 @@ class Steps(unittest.TestCase):
         steps.ads_undo(tv, "G070VM")
         self.assertEqual(tv.disabled, {before})
         self.assertNotIn("com.amazon.tv.launcher", " ".join(tv.log))
+
+    def test_undo_from_another_computer_uses_the_tv_record(self):
+        tv = FakeTv()
+        steps.ads_off(tv, "G070VM")
+        self.assertTrue(tv.record)
+        steps._record().unlink()                     # a different Mac: no record of its own
+        self.assertTrue(all(a["mine"] for a in steps.ads_state(tv, "G070VM")))
+        steps.ads_undo(tv, "G070VM")
+        self.assertEqual(tv.disabled, set())
+        self.assertEqual(tv.record, "")
+
+    def test_undo_everything(self):
+        other = "com.spocky.projengmenu/.services.ProjectivyAccessibilityService"
+        tv = FakeTv(grant=True, home=True, a11y=other + ":" + WATCHER, bound=True,
+                    disabled={p for p, _ in steps.ADS})
+        r = steps.undo_everything(tv, "G070VM")
+        self.assertFalse(tv.installed)
+        self.assertEqual(tv.a11y, other)             # the other launcher's service is kept
+        self.assertEqual(tv.disabled, set())         # every ad app back on, whoever switched it off
+        self.assertTrue(r["amazon_home"])
+        self.assertNotIn("com.amazon.tv.launcher", " ".join(c for c in tv.log if c.startswith("pm ")))
+
+    def test_undo_everything_alone_watcher_clears_the_list(self):
+        tv = FakeTv(grant=True, home=True, a11y=WATCHER, bound=True)
+        steps.undo_everything(tv, "G070VM")
+        self.assertEqual(tv.a11y, "null")
 
     def test_restart_is_sent_once_even_when_the_tv_drops(self):
         class Dev:

@@ -24,13 +24,16 @@
       <li><b>This Mac on the same Wi-Fi</b> as the TV.</li>
     </ul>
     <p class="small">This Mac is only needed today. Once it is set up, Couch TV runs on the TV by itself.</p>
-    <div class="actions"><button class="primary" data-go="adb">Start</button></div>
+    <div class="actions">
+      <button id="undo-start">Undo Couch TV</button>
+      <button class="primary" id="setup-start">Start</button>
+    </div>
   </section>
 
   <!-- 1 -->
   <section data-step="adb">
     <h1>Switch on ADB debugging</h1>
-    <p class="lead">This lets the Mac install Couch TV. Use the TV remote:</p>
+    <p class="lead">This lets the Mac make the changes on the TV. Use the TV remote:</p>
     <ol class="howto">
       <li>Open <b>Settings</b> (the gear at the right of the top row), then <b>My Fire TV</b>.</li>
       <li>If you see <b>Developer options</b>, skip to step 4.</li>
@@ -92,8 +95,12 @@
     <p class="lead" id="home-status">Setting Couch TV as the home screen. The TV may flash for a moment.</p>
     <div class="bar"><i id="home-bar"></i></div>
     <div id="home-restart" class="warn" hidden>
-      <p>Almost: the TV needs one restart before Couch TV can catch the Home button. It takes about a minute.</p>
+      <p id="restart-line">One last thing: Fire OS has not started Couch TV's Home watcher yet. A restart starts it (this happens after some updates). It takes about a minute, and this page carries on by itself.</p>
       <button id="restart-go">Restart the TV</button>
+    </div>
+    <div id="home-press" class="warn" hidden>
+      <p>One press on the TV: Couch TV's screen is open on your TV. With the remote, highlight <b>Use as home screen</b> and press the select button.</p>
+      <button id="home-pressed">I pressed it</button>
     </div>
     <p class="hint" id="home-others" hidden></p>
     <div class="actions"><button class="primary" id="home-next" hidden data-go="check">Next</button></div>
@@ -164,8 +171,30 @@
     <p class="small">You can switch ADB debugging off again now (Settings, My Fire TV, Developer options). Switch it back on if you ever run this setup again.</p>
     <div class="actions">
       <button data-go="welcome">Set up another TV</button>
-      <button class="primary" id="quit-go">Close setup</button>
+      <button class="primary" data-quit>Close setup</button>
     </div>
+  </section>
+
+  <!-- undo everything -->
+  <section data-step="undo">
+    <h1>Put Amazon's home back</h1>
+    <p class="lead">This takes your <span id="undo-device">Fire TV</span> back to how Amazon set it up:</p>
+    <ul class="need" id="undo-list"></ul>
+    <p class="small">Your other apps, sign-ins and settings stay as they are.</p>
+    <p id="undo-status"></p>
+    <div class="bar" hidden><i id="undo-bar"></i></div>
+    <div class="actions">
+      <button data-go="welcome">Back</button>
+      <button class="primary" id="undo-go">Undo it</button>
+    </div>
+  </section>
+
+  <section data-step="undone">
+    <h1>Amazon's home is back</h1>
+    <p class="lead" id="undone-line">Your Fire TV is back to how Amazon set it up.</p>
+    <p class="hint" id="undone-other" hidden></p>
+    <p class="small">Last step: switch ADB debugging off on the TV (Settings, My Fire TV, Developer options). To get Couch TV again any time, run this setup again.</p>
+    <div class="actions"><button class="primary" data-quit>Close setup</button></div>
   </section>
 
   <!-- shown after Close setup -->
