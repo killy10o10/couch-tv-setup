@@ -15,6 +15,10 @@ PKG = "dev.couchtv.ontv"
 WATCHER = f"{PKG}/{PKG}.WatchService"
 RELEASES = "https://api.github.com/repos/Seagey/couch-tv/releases/latest"
 APK_NAME = "couch-tv-ontv.apk"
+# Lets Keep watching list the apps' "Continue watching" (Watch Next) rows, which is how it fills on
+# a Fire TV whose own ADB is blocked (Seagey/couch-tv#122, #126). Android 9 and older call it
+# READ_EPG_DATA. couch-tv's app asks for both, so granting one changes nothing else.
+LISTINGS = ("android.permission.READ_TV_LISTINGS", "com.android.providers.tv.permission.READ_EPG_DATA")
 
 MODELS = {
     "AFTKM": "Fire TV Stick 4K (2nd gen)",
@@ -77,6 +81,8 @@ def app_state(tv):
         "installed": True,
         "version": version,
         "grant": "WRITE_SECURE_SETTINGS: granted=true" in out,
+        # Keep watching from Android's Watch Next rows (READ_EPG_DATA before Android 10)
+        "listings": f"{LISTINGS[0]}: granted=true" in out or f"{LISTINGS[1]}: granted=true" in out,
         "home_on": f"{PKG}.HomeAlias" in enabled,
     }
 
@@ -166,6 +172,11 @@ def make_home(tv, progress=lambda f, msg=None: None):
     if not state["grant"]:
         tv.shell(f"pm grant {PKG} android.permission.WRITE_SECURE_SETTINGS")
         done.append("grant")
+    if not state.get("listings"):
+        sdk = int(tv.prop("ro.build.version.sdk") or 0)
+        out = tv.shell(f"pm grant {PKG} {LISTINGS[0] if sdk >= 29 else LISTINGS[1]}")
+        if "Exception" not in out:   # an older couch-tv that does not ask for it: nothing to do
+            done.append("listings")
     # Drawing over other apps, and seeing which app is in front (Fire OS needs both for the Home
     # button: on-tv/README.md in Seagey/couch-tv).
     for op, name in (("SYSTEM_ALERT_WINDOW", "overlay"), ("GET_USAGE_STATS", "usage")):

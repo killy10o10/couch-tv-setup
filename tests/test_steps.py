@@ -15,6 +15,7 @@ INSTALLED = """Packages:
     versionName=0.12
     runtime permissions:
       android.permission.WRITE_SECURE_SETTINGS: granted={grant}
+      android.permission.READ_TV_LISTINGS: granted={listings}
 {enabled}
 """
 
@@ -28,6 +29,8 @@ class FakeTv:
         self.record = ""
         self.focus = 0            # the setup screen opens with Connect ADB highlighted
         self.screen_ok = True     # False: the screen cannot be read
+        self.listings = grant     # a TV set up before has it, a new one does not
+        self.old_app = False      # True: a couch-tv that does not ask for READ_TV_LISTINGS
         self.ops = {"SYSTEM_ALERT_WINDOW", "GET_USAGE_STATS"}   # appops already allowed
         self.front = "com.amazon.tv.launcher/.ui.HomeActivity_vNext"
 
@@ -49,8 +52,12 @@ class FakeTv:
             if not self.installed:
                 return "Unable to find package"
             enabled = "    enabledComponents:\n      dev.couchtv.ontv.HomeAlias\n" if self.home else ""
-            return INSTALLED.format(grant=str(self.grant).lower(), enabled=enabled)
-        if cmd.startswith("pm grant"):
+            return INSTALLED.format(grant=str(self.grant).lower(), listings=str(self.listings).lower(), enabled=enabled)
+        if cmd.startswith("pm grant") and cmd.endswith("READ_TV_LISTINGS"):
+            if self.old_app:
+                return "java.lang.SecurityException: Package dev.couchtv.ontv has not requested permission android.permission.READ_TV_LISTINGS"
+            self.listings = True
+        elif cmd.startswith("pm grant"):
             self.grant = True
         if cmd.startswith("pm enable dev.couchtv.ontv/.HomeAlias"):
             return "java.lang.SecurityException: Shell cannot change component state"   # as Fire OS
@@ -131,7 +138,7 @@ class Steps(unittest.TestCase):
     def test_new_tv_gets_everything(self):
         tv = FakeTv()
         r = steps.make_home(tv)
-        self.assertEqual(r["changed"], ["grant", "home"])
+        self.assertEqual(r["changed"], ["grant", "listings", "home"])
         self.assertTrue(r["watcher_running"])
         self.assertIn("pm grant dev.couchtv.ontv android.permission.WRITE_SECURE_SETTINGS", tv.log)
 
@@ -212,6 +219,18 @@ class Steps(unittest.TestCase):
     def test_home_check_fails_without_couch_tv(self):
         tv = FakeTv(grant=True, home=False)
         self.assertFalse(steps.press_home_check(tv)["ok"])
+
+    def test_watch_next_grant_is_given_once(self):
+        tv = FakeTv(grant=True, home=True, a11y=WATCHER, bound=True)
+        tv.listings = False
+        self.assertEqual(steps.make_home(tv)["changed"], ["listings"])
+        self.assertIn("pm grant dev.couchtv.ontv android.permission.READ_TV_LISTINGS", tv.log)
+        self.assertEqual(steps.make_home(tv)["changed"], [])           # the second run leaves it
+
+    def test_watch_next_grant_on_an_older_couch_tv_is_harmless(self):
+        tv = FakeTv(grant=True, home=True, a11y=WATCHER, bound=True)
+        tv.listings, tv.old_app = False, True
+        self.assertEqual(steps.make_home(tv)["changed"], [])
 
     def test_restart_is_sent_once_even_when_the_tv_drops(self):
         class Dev:
