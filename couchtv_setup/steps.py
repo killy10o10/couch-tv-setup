@@ -1,5 +1,6 @@
 """The setup steps. Each one looks first and only changes what is not already done, so running a
 step twice is safe, and a TV that is already set up is left as it is."""
+import hashlib
 import json
 import os
 import re
@@ -108,10 +109,14 @@ def download(progress=lambda f, msg=None: None):
     asset = next((a for a in rel.get("assets", []) if a.get("name") == APK_NAME), None)
     if not asset:
         raise TvError("The newest Couch TV release has no on-TV app to download.", "no_asset")
+    want = (asset.get("digest") or "").lower()
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", want):
+        raise TvError("GitHub did not say what the Couch TV download should look like, so it was not used.", "no_digest")
+    want = want.split(":", 1)[1]
     tag = rel.get("tag_name", "latest")
     dest = paths.cache() / f"couch-tv-ontv-{tag}.apk"
-    if dest.is_file() and dest.stat().st_size == asset.get("size"):
-        return {"path": str(dest), "version": tag}
+    if dest.is_file() and sha256(dest) == want:
+        return {"path": str(dest), "version": tag, "sha256": want}
     part = dest.with_suffix(".part")
     with _open(asset["browser_download_url"], timeout=60) as r, open(part, "wb") as f:
         total, got = int(r.headers.get("Content-Length") or asset.get("size") or 0), 0
@@ -123,11 +128,20 @@ def download(progress=lambda f, msg=None: None):
             got += len(chunk)
             if total:
                 progress(got / total, f"Downloading Couch TV {tag}")
-    if asset.get("size") and part.stat().st_size != asset["size"]:
+    if sha256(part) != want:
+        # cut short, changed on the way, or not the file GitHub lists: never install it
         part.unlink()
-        raise TvError("The download was cut short. Try again.", "short")
+        raise TvError("The Couch TV download did not match what GitHub lists for it, so it was thrown away. Try again.", "bad_download")
     part.replace(dest)
-    return {"path": str(dest), "version": tag}
+    return {"path": str(dest), "version": tag, "sha256": want}
+
+
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def install(tv, apk, replace=False, progress=lambda f, msg=None: None):
@@ -152,9 +166,12 @@ def make_home(tv, progress=lambda f, msg=None: None):
     if not state["grant"]:
         tv.shell(f"pm grant {PKG} android.permission.WRITE_SECURE_SETTINGS")
         done.append("grant")
-    if "allow" not in tv.shell(f"appops get {PKG} SYSTEM_ALERT_WINDOW"):
-        tv.shell(f"appops set {PKG} SYSTEM_ALERT_WINDOW allow")
-        done.append("overlay")
+    # Drawing over other apps, and seeing which app is in front (Fire OS needs both for the Home
+    # button: on-tv/README.md in Seagey/couch-tv).
+    for op, name in (("SYSTEM_ALERT_WINDOW", "overlay"), ("GET_USAGE_STATS", "usage")):
+        if "allow" not in tv.shell(f"appops get {PKG} {op}"):
+            tv.shell(f"appops set {PKG} {op} allow")
+            done.append(name)
     home_on = state["home_on"]
     if not home_on:
         # Fire OS does not let ADB switch the home alias on ("Shell cannot change component
@@ -268,8 +285,12 @@ def go_home(tv):
 
 
 def press_home_check(tv):
-    """Presses Home and says whether Couch TV is what came up. Waits a moment before the first
-    look, so the screen from before the press is not counted."""
+    """Opens Fire TV's settings, presses Home, and says whether Couch TV is what came up. Home
+    pressed while a home screen is already in front changes nothing, so it would prove nothing:
+    the settings screen is in front first. Waits a moment before the first look, so the screen
+    from before the press is not counted."""
+    tv.shell("am start -a android.settings.SETTINGS")
+    time.sleep(2.5)
     tv.shell("input keyevent KEYCODE_HOME")
     time.sleep(2)
     for _ in range(8):

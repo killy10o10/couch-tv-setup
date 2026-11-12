@@ -12,6 +12,6 @@ if not exist "%VENV%\Scripts\python.exe" (
     pause
     exit /b 1
   )
-  "%VENV%\Scripts\python.exe" -m pip install -q --disable-pip-version-check -r requirements.txt
+  "%VENV%\Scripts\python.exe" -m pip install -q --disable-pip-version-check --require-hashes --no-deps -r requirements.txt
 )
 "%VENV%\Scripts\python.exe" -m couchtv_setup

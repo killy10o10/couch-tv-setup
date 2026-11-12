@@ -28,6 +28,8 @@ class FakeTv:
         self.record = ""
         self.focus = 0            # the setup screen opens with Connect ADB highlighted
         self.screen_ok = True     # False: the screen cannot be read
+        self.ops = {"SYSTEM_ALERT_WINDOW", "GET_USAGE_STATS"}   # appops already allowed
+        self.front = "com.amazon.tv.launcher/.ui.HomeActivity_vNext"
 
     def _app_starts_watcher(self):
         """The app switches its watcher on when it starts or the home button is pressed, once it
@@ -69,7 +71,16 @@ class FakeTv:
                 self.home = not self.home
                 self._app_starts_watcher()
         if cmd.startswith("appops get"):
-            return "SYSTEM_ALERT_WINDOW: allow\n"
+            op = cmd.split()[-1]
+            return f"{op}: allow\n" if op in self.ops else "No operations.\n"
+        if cmd.startswith("appops set"):
+            self.ops.add(cmd.split()[-2])
+        if cmd == "am start -a android.settings.SETTINGS":
+            self.front = "com.amazon.tv.settings.v2/.tv.SettingsActivity"
+        if cmd == "input keyevent KEYCODE_HOME":
+            # Home does nothing while a home screen is already in front
+            if "launcher" not in self.front and "dev.couchtv.ontv" not in self.front:
+                self.front = "dev.couchtv.ontv/.HomeActivity" if self.home and self.bound else "com.amazon.tv.launcher/.ui.HomeActivity_vNext"
         if cmd.startswith("am force-stop"):
             self.focus = 0            # the setup screen opens with Connect ADB highlighted
             self._app_starts_watcher()
@@ -105,7 +116,7 @@ class FakeTv:
         if cmd.startswith("settings delete secure enabled_accessibility_services"):
             self.a11y = "null"
         if "mResumedActivity" in cmd:
-            return "mResumedActivity: ActivityRecord{1 u0 com.amazon.tv.launcher/.ui.HomeActivity_vNext}"
+            return "mResumedActivity: ActivityRecord{1 u0 " + self.front + "}"
         return ""
 
 
@@ -184,6 +195,23 @@ class Steps(unittest.TestCase):
         tv = FakeTv(grant=True, home=True, a11y=WATCHER, bound=True)
         steps.undo_everything(tv, "G070VM")
         self.assertEqual(tv.a11y, "null")
+
+    def test_missing_usage_grant_is_given(self):
+        tv = FakeTv(grant=True, home=True, a11y=WATCHER, bound=True)
+        tv.ops = {"SYSTEM_ALERT_WINDOW"}
+        r = steps.make_home(tv)
+        self.assertEqual(r["changed"], ["usage"])
+        self.assertIn("appops set dev.couchtv.ontv GET_USAGE_STATS allow", tv.log)
+
+    def test_home_check_leaves_amazons_home_first(self):
+        # Amazon's home in front: pressing Home alone would prove nothing
+        tv = FakeTv(grant=True, home=True, a11y=WATCHER, bound=True)
+        self.assertTrue(steps.press_home_check(tv)["ok"])
+        self.assertLess(tv.log.index("am start -a android.settings.SETTINGS"), tv.log.index("input keyevent KEYCODE_HOME"))
+
+    def test_home_check_fails_without_couch_tv(self):
+        tv = FakeTv(grant=True, home=False)
+        self.assertFalse(steps.press_home_check(tv)["ok"])
 
     def test_restart_is_sent_once_even_when_the_tv_drops(self):
         class Dev:

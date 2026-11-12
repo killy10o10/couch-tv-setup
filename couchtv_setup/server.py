@@ -39,6 +39,11 @@ IDLE_S = 180          # the page asks every 20 s; this long without it means the
 FIRST_S = 600         # time to open the page at all
 # Only this page may call the API: other websites open in the browser cannot guess it.
 SECRET = secrets.token_urlsafe(16)
+# The page's own scripts and styles only, and the two outside places it talks to: no inline
+# scripts, no other sites, and it may not be put in a frame on another page.
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+       "connect-src 'self' https://geocoding-api.open-meteo.com; frame-ancestors 'none'; "
+       "base-uri 'none'; form-action 'none'; object-src 'none'")
 OS = "mac" if sys.platform == "darwin" else "windows" if sys.platform == "win32" else "linux"
 
 
@@ -165,17 +170,33 @@ class Handler(BaseHTTPRequestHandler):
         if os.environ.get("COUCHTV_SETUP_DEBUG"):
             super().log_message(fmt, *args)
 
+    def _ours(self):
+        """Only the page this app opened may use it. A website can point its own name at
+        127.0.0.1 (DNS rebinding) and then ask this server things; its requests carry that name
+        as Host, and its own address as Origin, so both must be this server's."""
+        port = self.server.server_address[1]
+        ok = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        if self.headers.get("Host") not in ok:
+            return False
+        origin = self.headers.get("Origin")
+        return origin is None or origin in {f"http://{h}" for h in ok}
+
     def _send(self, code, data, ctype="application/json"):
         raw = data if isinstance(data, bytes) else json.dumps(data).encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        if ctype.startswith("text/html"):
+            self.send_header("Content-Security-Policy", CSP)
+            self.send_header("X-Frame-Options", "DENY")
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
         self.wfile.write(raw)
 
     def _api(self, method):
-        if self.headers.get("X-Setup-Key") != SECRET:
+        if not self._ours() or not secrets.compare_digest(self.headers.get("X-Setup-Key") or "", SECRET):
             return self._send(403, {"error": "not this page"})
         n = int(self.headers.get("Content-Length") or 0)
         try:
@@ -194,6 +215,8 @@ class Handler(BaseHTTPRequestHandler):
         self._api("POST")
 
     def do_GET(self):
+        if not self._ours():
+            return self._send(403, b"not this page", "text/plain")
         path = self.path.split("?")[0]
         if path.startswith("/api/"):
             return self._api("GET")
