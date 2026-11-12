@@ -47,7 +47,9 @@ def main(program):
         # Connecting to a TV that is not there still makes this computer's ADB key first, so this
         # checks the key making and adb-shell work inside the built app.
         get("/api/connect", key, {"ip": "127.0.0.1"})
-        for _ in range(30):
+        # Making a 2048-bit key in pure Python takes a while on a slow CI machine (over 30 s on
+        # the Intel Mac runner once), so give it up to 2 minutes.
+        for _ in range(120):
             job = json.loads(get("/api/job", key))
             if not job.get("running"):
                 break
