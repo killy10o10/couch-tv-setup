@@ -121,7 +121,11 @@ with an accessibility "watcher" whenever Amazon's home comes up. The setup:
 
 1. `pm grant dev.couchtv.ontv android.permission.WRITE_SECURE_SETTINGS`,
    `appops set dev.couchtv.ontv SYSTEM_ALERT_WINDOW allow` and
-   `appops set dev.couchtv.ontv GET_USAGE_STATS allow` (the one-off grants Fire OS needs).
+   `appops set dev.couchtv.ontv GET_USAGE_STATS allow` (the one-off grants Fire OS needs), and
+   `pm grant dev.couchtv.ontv android.permission.READ_TV_LISTINGS`, so Keep watching can list the
+   apps' own "Continue watching" rows (Fire OS blocks the other way it fills; see
+   [Seagey/couch-tv#122](https://github.com/Seagey/couch-tv/issues/122)). It needs a couch-tv
+   release with that change; on an older one the grant changes nothing.
 2. Presses the app's own **Use as home screen** button. Fire OS refuses
    `pm enable dev.couchtv.ontv/.HomeAlias` from ADB ("Shell cannot change component state"), so the
    setup opens Couch TV's setup screen, reads it with `uiautomator dump`, moves the highlight with
