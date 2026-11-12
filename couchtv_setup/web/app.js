@@ -36,7 +36,27 @@
     });
   }
   function showError(e) { var el = $("error"); el.textContent = e ? (e.message || String(e)) : ""; el.hidden = !e; }
-  function busy(text) { return '<span class="spin"></span>' + text; }
+  // Building the page from parts, never from HTML text: names from the network (a TV's name, an
+  // app's name, a place from the weather search) are always shown as plain text.
+  function node(x) { return typeof x === "string" ? document.createTextNode(x) : x; }
+  function h(tag, cls) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    for (var i = 2; i < arguments.length; i++) e.appendChild(node(arguments[i]));
+    return e;
+  }
+  function put(target) {
+    target.textContent = "";
+    for (var i = 1; i < arguments.length; i++) target.appendChild(node(arguments[i]));
+  }
+  function b(text) { return h("b", null, String(text)); }
+  function good(text) { return h("span", "good", "✓ " + text); }
+  function busy() {
+    var f = document.createDocumentFragment();
+    f.appendChild(h("span", "spin"));
+    for (var i = 0; i < arguments.length; i++) f.appendChild(node(arguments[i]));
+    return f;
+  }
 
   // ---- moving between steps ----
   var dots = $("dots");
@@ -60,8 +80,8 @@
   // ---- find ----
   ENTER.find = scan;
   function scan() {
-    $("find-status").innerHTML = busy("Looking on your Wi-Fi…");
-    $("found").innerHTML = "";
+    put($("find-status"), busy("Looking on your Wi-Fi…"));
+    put($("found"));
     $("find-help").hidden = true;
     call("/api/scan").then(function (r) {
       if (!r.tvs.length) {
@@ -72,11 +92,9 @@
       }
       $("find-status").textContent = r.tvs.length === 1 ? "Found one. Is this your TV?" : "Found " + r.tvs.length + ". Which is your TV?";
       r.tvs.forEach(function (t, i) {
-        var b = document.createElement("button");
-        if (i === 0) b.className = "primary";
-        b.innerHTML = "<span>" + (t.name || "Fire TV") + "</span><small>" + t.ip + "</small>";
-        b.onclick = function () { connect(t.ip); };
-        $("found").appendChild(b);
+        var btn = h("button", i === 0 ? "primary" : null, h("span", null, String(t.name || "Fire TV")), h("small", null, String(t.ip)));
+        btn.onclick = function () { connect(t.ip); };
+        $("found").appendChild(btn);
       });
     }, showError);
   }
@@ -92,11 +110,11 @@
     state.ip = ip;
     go("allow");
     $("allow-retry").hidden = true;
-    $("allow-status").innerHTML = busy("Tick <b>Always allow from this computer</b>, then press <b>Allow</b>.");
+    put($("allow-status"), busy("Tick ", b("Always allow from this computer"), ", then press ", b("Allow"), "."));
     job("/api/connect", { ip: ip }).then(function (dev) {
       state.device = dev;
       if (!dev.supported) {
-        $("allow-status").innerHTML = "This is a <b>" + dev.name + "</b> (" + dev.os + "). This setup is made for Fire TV sticks, so it stops here.";
+        put($("allow-status"), "This is a ", b(dev.name), " (" + dev.os + "). This setup is made for Fire TV sticks, so it stops here.");
         return;
       }
       go(state.mode === "undo" ? "undo" : "install");
@@ -110,7 +128,7 @@
   // ---- install ----
   ENTER.install = function () {
     var d = state.device, app = d.app || {};
-    $("device-line").innerHTML = "Connected to your <b>" + d.name + "</b> (" + d.os + ").";
+    put($("device-line"), "Connected to your ", b(d.name), " (" + d.os + ").");
     $("install-bar").style.width = "0";
     $("install-bar").parentNode.hidden = true;
     $("install-replace").hidden = true;
@@ -129,9 +147,9 @@
     $("install-bar").parentNode.hidden = false;
     job("/api/install", { replace: !!replace }, function (f, msg) {
       $("install-bar").style.width = Math.round(f * 100) + "%";
-      if (msg) $("install-status").innerHTML = busy(msg + "…");
+      if (msg) put($("install-status"), busy(msg + "…"));
     }).then(function (r) {
-      $("install-status").innerHTML = '<span class="good">✓ Couch TV ' + r.apk.version + " is on the TV.</span>";
+      put($("install-status"), good("Couch TV " + r.apk.version + " is on the TV."));
       state.device.app = r.app;
       setTimeout(function () { go("home"); }, 900);
     }, function (e) {
@@ -148,27 +166,27 @@
   $("install-skip").onclick = function () { go("home"); };
 
   // ---- home ----
-  var RESTART_LINE = $("restart-line").innerHTML;
+  var RESTART_LINE = Array.prototype.map.call($("restart-line").childNodes, function (n) { return n.cloneNode(true); });
   ENTER.home = function () {
     $("home-press").hidden = true;
     $("home-restart").hidden = true;
-    $("restart-line").innerHTML = RESTART_LINE;
+    put.apply(null, [$("restart-line")].concat(RESTART_LINE.map(function (n) { return n.cloneNode(true); })));
     $("home-next").hidden = true;
     $("home-others").hidden = true;
     $("home-bar").style.width = "0";
     job("/api/home", {}, function (f, msg) {
       $("home-bar").style.width = Math.round(f * 100) + "%";
-      if (msg) $("home-status").innerHTML = busy(msg + "…");
+      if (msg) put($("home-status"), busy(msg + "…"));
     }).then(function (r) {
       if (r.other_watchers.length) {
         $("home-others").hidden = false;
-        $("home-others").innerHTML = "<b>" + r.other_watchers.join(" and ") + "</b> is also on this TV. If it is set to take over the Home button too, the two will fight: switch its override off in its own settings. It can stay installed.";
+        put($("home-others"), b(r.other_watchers.join(" and ")), " is also on this TV. If it is set to take over the Home button too, the two will fight: switch its override off in its own settings. It can stay installed.");
       }
       if (!r.home_on) {
         $("home-status").textContent = "";
         $("home-press").hidden = false;
       } else if (r.watcher_running) {
-        $("home-status").innerHTML = '<span class="good">✓ Couch TV is your home screen.</span>';
+        put($("home-status"), good("Couch TV is your home screen."));
         $("home-next").hidden = false;
       } else {
         $("home-status").textContent = "";
@@ -180,7 +198,7 @@
   $("restart-go").onclick = function () {
     $("restart-go").disabled = true;
     call("/api/restart", {}).then(function () {
-      $("restart-line").innerHTML = busy("Restarting the TV. This page carries on by itself when it is back…");
+      put($("restart-line"), busy("Restarting the TV. This page carries on by itself when it is back…"));
       waitForTv(0);
     }, showError);
   };
@@ -198,11 +216,11 @@
   ENTER.check = function () { $("check-next").hidden = true; $("check-go").disabled = false; };
   $("check-go").onclick = function () {
     $("check-go").disabled = true;
-    $("check-status").innerHTML = busy("Pressing Home…");
+    put($("check-status"), busy("Opening Fire TV settings, then pressing Home…"));
     job("/api/check", {}).then(function (r) {
       $("check-go").disabled = false;
       if (r.ok) {
-        $("check-status").innerHTML = '<span class="good">✓ Couch TV came up. Try the Home button on your remote too.</span>';
+        put($("check-status"), good("Couch TV came up. Try the Home button on your remote too."));
         $("check-next").hidden = false;
       } else {
         $("check-status").textContent = "Amazon's home stayed. Going back a step to fix it…";
@@ -221,7 +239,7 @@
     }, showError);
   };
   $("pin-go").onclick = function () {
-    $("pair-status").innerHTML = busy("Pairing…");
+    put($("pair-status"), busy("Pairing…"));
     call("/api/pair", { pin: $("pin").value }).then(function () { go("personalise"); }, function (e) {
       $("pair-status").textContent = "";
       showError(e);
@@ -234,48 +252,46 @@
     state.picks = [];
     call("/api/apps").then(function (r) {
       var box = $("apps");
-      box.innerHTML = "";
-      if (!r.apps.length) { box.innerHTML = '<p class="small">Open the home once (press Home) to see your apps here.</p>'; return; }
+      put(box);
+      if (!r.apps.length) { put(box, h("p", "small", "Open the home once (press Home) to see your apps here.")); return; }
       r.apps.forEach(function (a) {
         if (!a.package) return;
-        var b = document.createElement("button");
-        b.textContent = a.name || a.package;
-        b.onclick = function () {
+        var btn = h("button", null, String(a.name || a.package));
+        btn.onclick = function () {
           var i = state.picks.indexOf(a.package);
           if (i >= 0) state.picks.splice(i, 1); else state.picks.push(a.package);
           drawPicks();
         };
-        b.dataset.pkg = a.package;
-        box.appendChild(b);
+        btn.dataset.pkg = a.package;
+        btn.dataset.name = String(a.name || a.package);
+        box.appendChild(btn);
       });
     }, showError);
   };
   function drawPicks() {
-    document.querySelectorAll("#apps button").forEach(function (b) {
-      var i = state.picks.indexOf(b.dataset.pkg);
-      var name = b.textContent.replace(/^\d+/, "");
-      b.innerHTML = (i >= 0 ? "<b>" + (i + 1) + "</b>" : "") + name;
-      b.className = i >= 0 ? "primary" : "";
+    document.querySelectorAll("#apps button").forEach(function (btn) {
+      var i = state.picks.indexOf(btn.dataset.pkg);
+      if (i >= 0) put(btn, b(i + 1), btn.dataset.name); else put(btn, btn.dataset.name);
+      btn.className = i >= 0 ? "primary" : "";
     });
   }
   $("city-go").onclick = function () {
     var q = $("city").value.trim();
     if (!q) return;
-    $("places").innerHTML = busy("Searching…");
+    put($("places"), busy("Searching…"));
     fetch("https://geocoding-api.open-meteo.com/v1/search?count=5&format=json&language=en&name=" + encodeURIComponent(q))
       .then(function (r) { return r.json(); })
       .then(function (j) {
         var box = $("places");
-        box.innerHTML = "";
+        put(box);
         (j.results || []).forEach(function (p) {
-          var b = document.createElement("button");
-          b.innerHTML = "<span>" + p.name + "</span><small>" + [p.admin1, p.country].filter(Boolean).join(", ") + "</small>";
-          b.onclick = function () {
+          var btn = h("button", null, h("span", null, String(p.name)), h("small", null, [p.admin1, p.country].filter(Boolean).join(", ")));
+          btn.onclick = function () {
             state.place = p;
             box.querySelectorAll("button").forEach(function (x) { x.className = ""; });
-            b.className = "primary";
+            btn.className = "primary";
           };
-          box.appendChild(b);
+          box.appendChild(btn);
         });
         if (!box.children.length) box.textContent = "No place found by that name.";
       }, function () { $("places").textContent = "Could not search. Is this computer online?"; });
@@ -290,9 +306,9 @@
     var people = $("people").value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
     if (people.length) body.people = people;
     if (state.picks.length) { body.order = state.picks; body.line = Math.min(state.picks.length, 10); }
-    $("save-status").innerHTML = busy("Saving…");
+    put($("save-status"), busy("Saving…"));
     call("/api/personalise", body).then(function () {
-      $("save-status").innerHTML = '<span class="good">✓ Saved. Have a look at your TV.</span>';
+      put($("save-status"), good("Saved. Have a look at your TV."));
       setTimeout(function () { go("ads"); }, 900);
     }, function (e) { $("save-status").textContent = ""; showError(e); });
   };
@@ -300,13 +316,10 @@
   // ---- ads ----
   function drawAds(list) {
     var ul = $("ads");
-    ul.innerHTML = "";
+    put(ul);
     var allOff = true;
     list.forEach(function (a) {
-      var li = document.createElement("li");
-      li.className = a.off ? "off" : "";
-      li.innerHTML = "<span>" + a.what + "</span><span>" + (a.off ? "off" : "on") + "</span>";
-      ul.appendChild(li);
+      ul.appendChild(h("li", a.off ? "off" : "", h("span", null, String(a.what)), h("span", null, a.off ? "off" : "on")));
       if (!a.off) allOff = false;
     });
     $("ads-go").textContent = allOff ? "Next" : "Switch them off";
@@ -324,14 +337,14 @@
   };
   $("ads-go").onclick = function () {
     if ($("ads-go").textContent === "Next") return go("done");
-    $("ads-status").innerHTML = busy("Switching them off…");
+    put($("ads-status"), busy("Switching them off…"));
     call("/api/ads", { action: "off" }).then(function (r) {
       drawAds(r.apps);
-      $("ads-status").innerHTML = '<span class="good">✓ Done.</span>';
+      put($("ads-status"), good("Done."));
     }, showError);
   };
   $("ads-undo").onclick = function () {
-    $("ads-status").innerHTML = busy("Switching back on what this setup switched off…");
+    put($("ads-status"), busy("Switching back on what this setup switched off…"));
     call("/api/ads", { action: "undo" }).then(function (r) {
       drawAds(r.apps);
       $("ads-status").textContent = list_note(r.apps);
@@ -356,21 +369,21 @@
   $("undo-start").onclick = function () { state.mode = "undo"; go("adb"); };
   ENTER.undo = function () {
     var ul = $("undo-list");
-    ul.innerHTML = "<li>" + busy("Looking at the TV…") + "</li>";
+    put(ul, h("li", null, busy("Looking at the TV…")));
     $("undo-status").textContent = "";
     $("undo-go").disabled = true;
     $("undo-bar").parentNode.hidden = true;
     $("undo-device").textContent = state.device ? state.device.name : "Fire TV";
     call("/api/undo/plan", {}).then(function (p) {
       var items = [];
-      if (p.app.installed) items.push("<b>Couch TV is removed</b>, and Amazon's home is on the Home button again.");
-      else if (p.watcher_listed) items.push("Couch TV's leftover <b>Home watcher</b> is switched off.");
-      if (p.ads_off.length) items.push("<b>" + p.ads_off.length + " Amazon apps are switched back on</b>: " + p.ads_off.join(", ") + ".");
+      if (p.app.installed) items.push(h("li", null, b("Couch TV is removed"), ", and Amazon's home is on the Home button again."));
+      else if (p.watcher_listed) items.push(h("li", null, "Couch TV's leftover ", b("Home watcher"), " is switched off."));
+      if (p.ads_off.length) items.push(h("li", null, b(p.ads_off.length + " Amazon apps are switched back on"), ": " + p.ads_off.join(", ") + "."));
       if (!items.length) {
-        ul.innerHTML = "<li>Nothing to undo: Couch TV is not on this TV and Amazon's apps are all on.</li>";
+        put(ul, h("li", null, "Nothing to undo: Couch TV is not on this TV and Amazon's apps are all on."));
         return;
       }
-      ul.innerHTML = items.map(function (t) { return "<li>" + t + "</li>"; }).join("");
+      put.apply(null, [ul].concat(items));
       $("undo-go").disabled = false;
     }, showError);
   };
@@ -379,12 +392,12 @@
     $("undo-bar").parentNode.hidden = false;
     job("/api/undo", {}, function (f, msg) {
       $("undo-bar").style.width = Math.round(f * 100) + "%";
-      if (msg) $("undo-status").innerHTML = busy(msg + "…");
+      if (msg) put($("undo-status"), busy(msg + "…"));
     }).then(function (r) {
       $("undone-other").hidden = true;
       if (!r.amazon_home && r.other_watchers.length) {
         $("undone-other").hidden = false;
-        $("undone-other").innerHTML = "Couch TV is gone, but <b>" + r.other_watchers.join(" and ") + "</b> is still set to take over the Home button. Switch that off in its own settings, or uninstall it, to get Amazon's home.";
+        put($("undone-other"), "Couch TV is gone, but ", b(r.other_watchers.join(" and ")), " is still set to take over the Home button. Switch that off in its own settings, or uninstall it, to get Amazon's home.");
       }
       go("undone");
     }, function (e) { $("undo-go").disabled = false; showError(e); });

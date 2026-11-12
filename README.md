@@ -79,7 +79,7 @@ except the download from GitHub and the place search (open-meteo.com) for the we
 **Undo Couch TV** on the first screen puts the TV back the way Amazon set it up. It connects like
 the setup (ADB debugging on, press Allow), shows exactly what it will change, then:
 
-- takes Couch TV off the Home button and uninstalls it (its two grants go with it)
+- takes Couch TV off the Home button and uninstalls it (its grants go with it)
 - takes its Home watcher out of the accessibility list, keeping any other app's
 - switches every ad and tracking app on the setup's list back on, whoever switched it off
 - presses Home and checks Amazon's home comes up (if another launcher such as Projectivy takes the
@@ -95,7 +95,7 @@ the setup's Undo switches them back on (or a factory reset).
 ## For developers
 
 ```sh
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3 -m venv .venv && .venv/bin/pip install --require-hashes --no-deps -r requirements.txt
 .venv/bin/python -m couchtv_setup              # opens the page
 .venv/bin/python -m unittest discover -s tests # tests against a pretend TV
 ```
@@ -119,8 +119,9 @@ page and stops on Close setup (`tests/smoke.py`). A `v*` tag attaches all three 
 Fire OS does not let another app replace Amazon's home. couch-tv's on-TV app brings itself back
 with an accessibility "watcher" whenever Amazon's home comes up. The setup:
 
-1. `pm grant dev.couchtv.ontv android.permission.WRITE_SECURE_SETTINGS` and
-   `appops set dev.couchtv.ontv SYSTEM_ALERT_WINDOW allow` (the two one-off grants).
+1. `pm grant dev.couchtv.ontv android.permission.WRITE_SECURE_SETTINGS`,
+   `appops set dev.couchtv.ontv SYSTEM_ALERT_WINDOW allow` and
+   `appops set dev.couchtv.ontv GET_USAGE_STATS allow` (the one-off grants Fire OS needs).
 2. Presses the app's own **Use as home screen** button. Fire OS refuses
    `pm enable dev.couchtv.ontv/.HomeAlias` from ADB ("Shell cannot change component state"), so the
    setup opens Couch TV's setup screen, reads it with `uiautomator dump`, moves the highlight with
@@ -131,6 +132,24 @@ with an accessibility "watcher" whenever Amazon's home comes up. The setup:
    whatever else is there.
 4. Checks the watcher is running. If not, it offers to restart the TV (Fire OS sometimes needs that
    after an install).
+5. The check step opens Fire TV's settings, presses Home, and looks for Couch TV in front. (Home
+   pressed while Amazon's home is already showing changes nothing, so that would prove nothing.)
+
+### Keeping it safe
+
+- **The download:** Couch TV comes from the newest release on
+  [Seagey/couch-tv](https://github.com/Seagey/couch-tv/releases). The setup checks its SHA-256
+  against the one GitHub lists for that file and throws it away if they differ. A cached copy is
+  checked the same way before it is used.
+- **The page:** the server listens on 127.0.0.1 only. Every API call needs a key made fresh each
+  launch, and requests are refused unless their `Host` (and `Origin`, when sent) is this server, so
+  a website cannot reach it by pointing its own name at 127.0.0.1. The page is built without
+  `innerHTML`, so a TV, app or place name is always shown as plain text, and a Content Security
+  Policy allows only the page's own files and the weather search.
+- **The build:** Python packages are installed with `--require-hashes` from `requirements.txt` and
+  `requirements-build.txt`, so only those exact files can be used. GitHub Actions are pinned to
+  commits. The workflow is read-only, and only the release job on a `v*` tag may write. It also
+  attaches `SHA256SUMS.txt` for the zips.
 
 ## Credits
 

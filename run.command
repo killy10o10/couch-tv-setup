@@ -13,7 +13,7 @@ fi
 if [ ! -x "$VENV/bin/python" ] || ! "$VENV/bin/python" -c 'import adb_shell, certifi' >/dev/null 2>&1; then
   echo "Getting ready (only the first time, about a minute)..."
   mkdir -p "$HOME_DIR"
-  python3 -m venv "$VENV" && "$VENV/bin/pip" install -q --disable-pip-version-check -r requirements.txt || {
+  python3 -m venv "$VENV" && "$VENV/bin/pip" install -q --disable-pip-version-check --require-hashes --no-deps -r requirements.txt || {
     echo "Could not get ready. Is this Mac online?"; exit 1; }
 fi
 exec "$VENV/bin/python" -m couchtv_setup
